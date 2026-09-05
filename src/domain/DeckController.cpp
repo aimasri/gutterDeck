@@ -54,6 +54,45 @@ bool matchesProcessCommand(uint32_t pid, const QString& expectedCommand) {
     }
     return false;
 }
+
+bool isProcessDescendant(uint32_t childPid, uint32_t targetPid) {
+    if (childPid == 0 || targetPid == 0) {
+        return false;
+    }
+    if (childPid == targetPid) {
+        return true;
+    }
+
+    uint32_t curr = childPid;
+    for (int depth = 0; depth < 16; ++depth) {
+        QFile statFile(QString("/proc/%1/stat").arg(curr));
+        if (!statFile.open(QIODevice::ReadOnly)) {
+            break;
+        }
+        QByteArray content = statFile.readAll();
+        statFile.close();
+
+        int closingParen = content.lastIndexOf(')');
+        if (closingParen < 0) {
+            break;
+        }
+        QByteArray afterParen = content.mid(closingParen + 2).trimmed();
+        QList<QByteArray> parts = afterParen.split(' ');
+        if (parts.size() < 2) {
+            break;
+        }
+        bool ok = false;
+        uint32_t ppid = parts[1].toUInt(&ok);
+        if (!ok || ppid <= 1) {
+            break;
+        }
+        if (ppid == targetPid) {
+            return true;
+        }
+        curr = ppid;
+    }
+    return false;
+}
 } // namespace
 
 DeckController::DeckController(
@@ -298,17 +337,43 @@ void DeckController::onDeckLaunched(int index, qint64 pid, const QString& comman
 }
 
 void DeckController::onWindowMapped(uint32_t wid, uint32_t pid, const QString& title) {
+    // 0. Safety filters: ignore GutterDeck's own windows, already-tracked windows, and foreign workspaces
+    if (wid == XCB_WINDOW_NONE) {
+        return;
+    }
+    if (m_overlay && wid == static_cast<xcb_window_t>(m_overlay->winId())) {
+        return;
+    }
+    if (pid > 0 && pid == static_cast<uint32_t>(QCoreApplication::applicationPid())) {
+        return;
+    }
+    for (const auto& deck : m_decks) {
+        if (deck.windowId == wid) {
+            return;
+        }
+    }
+
+    // Ignore windows mapped on a different specific workspace (0xFFFFFFFF = all workspaces)
+    uint32_t winDesktop = m_xcbEngine.getWindowDesktop(wid);
+    if (winDesktop != 0xFFFFFFFF && winDesktop != m_assignedDesktop) {
+        qDebug() << "Ignoring window" << wid << "on foreign desktop" << winDesktop
+                 << "(Assigned deck desktop:" << m_assignedDesktop << ")";
+        return;
+    }
+
     QString wmClass = m_xcbEngine.getWindowClass(wid);
     qDebug() << "Window mapped: WID =" << wid << "PID =" << pid << "Title =" << title << "WM_CLASS =" << wmClass;
 
     int matchedIndex = -1;
 
-    // 1. Primary matching algorithm: Match by direct OS Process ID (_NET_WM_PID)
+    // 1. Primary matching algorithm: Match by direct OS Process ID or process tree ancestry
     if (pid > 0) {
         for (int i = 0; i < m_decks.size(); ++i) {
-            if (m_decks[i].pid == pid && m_decks[i].windowId == XCB_WINDOW_NONE) {
-                matchedIndex = i;
-                break;
+            if (m_decks[i].windowId == XCB_WINDOW_NONE && m_decks[i].pid > 0) {
+                if (m_decks[i].pid == pid || isProcessDescendant(pid, static_cast<uint32_t>(m_decks[i].pid))) {
+                    matchedIndex = i;
+                    break;
+                }
             }
         }
     }
@@ -327,7 +392,7 @@ void DeckController::onWindowMapped(uint32_t wid, uint32_t pid, const QString& t
             }
             cmd = cmd.toLower();
 
-            if (wmLower.contains(cmd) || cmd.contains(wmLower)) {
+            if (!cmd.isEmpty() && (wmLower.contains(cmd) || cmd.contains(wmLower))) {
                 matchedIndex = i;
                 break;
             }
@@ -355,28 +420,29 @@ void DeckController::onWindowMapped(uint32_t wid, uint32_t pid, const QString& t
         }
     }
 
-    // 4. Pending launch correlation: If a window mapped within 4s of launching a slot awaiting window
+    // 4. Pending launch correlation: If a window mapped within 3s of launching a slot awaiting window
+    // and there is plausible relation (class, title, or process matches command binary)
     if (matchedIndex == -1 && m_lastLaunchedDeckIndex >= 0 && m_lastLaunchedDeckIndex < m_decks.size()) {
         qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_lastLaunchedTimestampMs;
-        if (elapsed < 4000 && m_decks[m_lastLaunchedDeckIndex].windowId == XCB_WINDOW_NONE) {
-            matchedIndex = m_lastLaunchedDeckIndex;
+        if (elapsed < 3000 && m_decks[m_lastLaunchedDeckIndex].windowId == XCB_WINDOW_NONE) {
+            QString cmd = m_decks[m_lastLaunchedDeckIndex].command.trimmed().split(' ').first();
+            int slashIdx = cmd.lastIndexOf('/');
+            if (slashIdx >= 0) {
+                cmd = cmd.mid(slashIdx + 1);
+            }
+            cmd = cmd.toLower();
+
+            bool correlated = wmClass.isEmpty() ||
+                              (!cmd.isEmpty() && (wmClass.toLower().contains(cmd) || title.toLower().contains(cmd))) ||
+                              (pid > 0 && matchesProcessCommand(pid, m_decks[m_lastLaunchedDeckIndex].command));
+            if (correlated) {
+                matchedIndex = m_lastLaunchedDeckIndex;
+            }
         }
     }
 
-    // 5. Fallback: If only one slot is awaiting a window and PID is unknown or 0
-    if (matchedIndex == -1) {
-        int unassignedCount = 0;
-        int candidateIndex = -1;
-        for (int i = 0; i < m_decks.size(); ++i) {
-            if (m_decks[i].windowId == XCB_WINDOW_NONE) {
-                ++unassignedCount;
-                candidateIndex = i;
-            }
-        }
-        if (unassignedCount == 1) {
-            matchedIndex = candidateIndex;
-        }
-    }
+    // Note: Fallback 5 removed completely. Blindly capturing arbitrary windows causes
+    // unrelated user applications to be hijacked into GutterDeck.
 
     if (matchedIndex != -1) {
         qDebug() << "Attaching Window ID" << wid << "to Deck ["
@@ -709,15 +775,16 @@ void DeckController::onCloseDeck(int index) {
         return;
     }
 
-    qint64 pid = m_decks[index].pid;
     xcb_window_t winId = m_decks[index].windowId;
 
     if (winId != XCB_WINDOW_NONE) {
         static_cast<void>(m_xcbEngine.restoreWindow(winId));
         static_cast<void>(m_xcbEngine.closeWindow(winId));
-    } else if (pid > 0) {
-        ::kill(static_cast<pid_t>(pid), SIGTERM);
     }
+    // Note: Do NOT kill(pid, SIGTERM) here. Process IDs may be shared across
+    // multiple windows (e.g. Google Chrome, GNOME Terminal server, VS Code).
+    // Standard graceful close requests via closeWindow() cleanly notify the specific
+    // window to close without terminating other instances outside of GutterDeck.
 
     int oldActive = m_activeDeckIndex;
     int nextActive = oldActive;
@@ -756,7 +823,7 @@ void DeckController::onCloseDeck(int index) {
 }
 
 void DeckController::closeGutterDeck() {
-    qDebug() << "Closing Gutter Deck: gracefully closing all managed deck windows...";
+    qDebug() << "Closing Gutter Deck: gracefully closing managed deck windows...";
 
     static_cast<void>(m_xcbEngine.ungrabAltLeftRightKeys());
 
@@ -765,9 +832,8 @@ void DeckController::closeGutterDeck() {
         m_overlay->hide();
     }
 
-    // 2. Restore minimized windows and send graceful close requests
+    // 2. Restore minimized windows and send graceful close requests to managed windows
     QVector<xcb_window_t> pendingWindows;
-    QVector<qint64> pendingPids;
 
     for (const auto& deck : m_decks) {
         if (deck.windowId != XCB_WINDOW_NONE) {
@@ -775,55 +841,42 @@ void DeckController::closeGutterDeck() {
             static_cast<void>(m_xcbEngine.closeWindow(deck.windowId));
             pendingWindows.append(deck.windowId);
         }
-        if (deck.pid > 0) {
-            pendingPids.append(deck.pid);
-        }
     }
 
-    // 3. Graceful wait loop: allow applications up to 2500ms to save sessions and exit cleanly
+    // 3. Graceful wait loop: allow applications up to 1500ms to save sessions and exit cleanly
     QElapsedTimer timer;
     timer.start();
 
-    while (timer.elapsed() < 2500) {
+    while (timer.elapsed() < 1500 && !pendingWindows.isEmpty()) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
 
         auto liveWindows = m_xcbEngine.getTopLevelWindows();
-        bool anyWindowAlive = false;
-        for (xcb_window_t wid : pendingWindows) {
-            if (liveWindows.contains(wid)) {
-                anyWindowAlive = true;
-                break;
+        for (auto it = pendingWindows.begin(); it != pendingWindows.end();) {
+            if (!liveWindows.contains(*it)) {
+                it = pendingWindows.erase(it);
+            } else {
+                ++it;
             }
         }
 
-        bool anyPidAlive = false;
-        for (qint64 pid : pendingPids) {
-            if (::kill(static_cast<pid_t>(pid), 0) == 0) {
-                anyPidAlive = true;
-                break;
-            }
-        }
-
-        if (!anyWindowAlive && !anyPidAlive) {
-            qDebug() << "All deck applications closed cleanly in" << timer.elapsed() << "ms.";
+        if (pendingWindows.isEmpty()) {
+            qDebug() << "All deck windows closed cleanly in" << timer.elapsed() << "ms.";
             break;
         }
 
         QThread::msleep(50);
     }
 
-    // 4. Forceful fallback ONLY for applications that hung or failed to exit within the grace period
+    // 4. Safe recovery: If any window remained open after the grace period (e.g. user cancelled
+    //    an unsaved document prompt), do NOT call killClient or SIGTERM. That would destroy
+    //    unsaved user data or terminate shared master processes (such as browser windows
+    //    running outside GutterDeck). Instead, restore taskbar visibility so the user can interact.
     auto remainingWindows = m_xcbEngine.getTopLevelWindows();
     for (xcb_window_t wid : pendingWindows) {
         if (remainingWindows.contains(wid)) {
-            qWarning() << "Window" << wid << "unresponsive after grace period, forcing killClient.";
-            static_cast<void>(m_xcbEngine.killClient(wid));
-        }
-    }
-    for (qint64 pid : pendingPids) {
-        if (::kill(static_cast<pid_t>(pid), 0) == 0) {
-            qWarning() << "PID" << pid << "unresponsive after grace period, sending SIGTERM.";
-            ::kill(static_cast<pid_t>(pid), SIGTERM);
+            qWarning() << "Window" << wid << "remained open; restoring taskbar visibility.";
+            static_cast<void>(m_xcbEngine.setSkipTaskbar(wid, false));
+            static_cast<void>(m_xcbEngine.restoreWindow(wid));
         }
     }
 

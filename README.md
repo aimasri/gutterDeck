@@ -156,7 +156,7 @@ Every layer was rebuilt around robust systems engineering standards:
 3. **Watchdog-Guarded State Machine:** An integrated hardware-style watchdog timer monitors transitions. If any animation drops or aborts, the watchdog triggers an emergency reset back to `IDLE` within 3 seconds, restoring click-through transparency and permanently eliminating desktop lockouts.
 4. **Non-Blocking XCB Event Loop:** Eliminated all polling loops. A `QSocketNotifier` listens directly to `xcb_get_file_descriptor()`, integrating X11 server events (`MapNotify`, `DestroyNotify`, `PropertyNotify`) into Qt's event loop with zero CPU churn.
 5. **Multi-Tier Window Discovery:** Windows are matched using a robust 4-tier cascade: PID matching (`_NET_WM_PID`) → `WM_CLASS` inspection → `/proc/<PID>/cmdline` token analysis → sequential launch correlation fallback.
-6. **Graceful Application Closure:** Implemented multi-stage graceful shutdown via `_NET_CLOSE_WINDOW` and `WM_DELETE_WINDOW` with an active polling grace loop before resorting to `SIGTERM`, ensuring browsers like Chrome save pinned tabs and session history cleanly.
+6. **Graceful Isolated Application Closure:** Implemented multi-stage graceful shutdown via `_NET_CLOSE_WINDOW` and `WM_DELETE_WINDOW` targeted strictly to managed window IDs. Eliminates all broadcast `SIGTERM` and `killClient` calls, ensuring that applications sharing a master daemon process (like Google Chrome, GNOME Terminal, or VS Code) keep their external windows open and unharmed outside GutterDeck.
 
 ---
 
@@ -334,10 +334,11 @@ Forcibly killing applications with `SIGTERM` or `killClient` causes web browsers
 
 gutterDeck v3.0 implements a **Multi-Stage Graceful Shutdown**:
 1. When closing gutterDeck or deleting a deck slot, the overlay UI hides immediately so the desktop feels instant.
-2. `DeckController` dispatches standard `_NET_CLOSE_WINDOW` and `WM_DELETE_WINDOW` client messages to all managed windows.
-3. An active polling loop checks process existence every 50ms up to a 2500ms grace timeout.
-4. As soon as all processes exit cleanly (typically 200–400ms for Chrome), the application shuts down immediately without lingering.
-5. `killClient` / `SIGTERM` is retained strictly as a safety net if an application hangs after the 2.5s grace period.
+2. `DeckController` dispatches standard `_NET_CLOSE_WINDOW` and `WM_DELETE_WINDOW` client messages strictly to managed window IDs.
+3. An active polling loop checks client window existence every 50ms up to a 1500ms grace timeout.
+4. As soon as all managed deck windows close cleanly, GutterDeck shuts down immediately.
+5. If an application window remains open after the grace period (e.g., user clicked "Cancel" on a save prompt), GutterDeck never kills the client or process; it restores taskbar visibility (`_NET_WM_STATE_SKIP_TASKBAR` removed) and leaves the window intact so user work is never lost.
+6. Crucially, GutterDeck never sends `SIGTERM` to PIDs or calls `xcb_kill_client`, guaranteeing that external browser windows, terminal sessions, or editors running outside GutterDeck are completely unaffected.
 
 ---
 
