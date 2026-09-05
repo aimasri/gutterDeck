@@ -1,0 +1,831 @@
+#include "DeckController.h"
+#include "StateMachine.h"
+#include "AppLauncher.h"
+#include "../infrastructure/XcbEngine.h"
+#include "../infrastructure/WindowWatcher.h"
+#include "../infrastructure/ConfigManager.h"
+#include "../presentation/OverlayWindow.h"
+#include "../presentation/CurtainWidget.h"
+#include "../presentation/GutterWidget.h"
+#include "../presentation/SleekDialogs.h"
+
+#include <QAction>
+#include <QApplication>
+#include <QDateTime>
+#include <QDebug>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QRegularExpression>
+#include <QThread>
+#include <QUuid>
+#include <csignal>
+#include <sys/types.h>
+
+namespace {
+bool matchesProcessCommand(uint32_t pid, const QString& expectedCommand) {
+    if (pid == 0 || expectedCommand.trimmed().isEmpty()) {
+        return false;
+    }
+    QFile cmdlineFile(QString("/proc/%1/cmdline").arg(pid));
+    if (cmdlineFile.open(QIODevice::ReadOnly)) {
+        QByteArray data = cmdlineFile.readAll();
+        cmdlineFile.close();
+        if (!data.isEmpty()) {
+            QString procCmd = QString::fromUtf8(data).replace('\0', ' ').trimmed().toLower();
+            QString expectedBin = expectedCommand.trimmed().split(' ').first();
+            int slashIdx = expectedBin.lastIndexOf('/');
+            if (slashIdx >= 0) {
+                expectedBin = expectedBin.mid(slashIdx + 1);
+            }
+            expectedBin = expectedBin.toLower();
+
+            if (!expectedBin.isEmpty() && procCmd.contains(expectedBin)) {
+                return true;
+            }
+
+            // Sub-token match (e.g. "google-chrome" vs "/opt/google/chrome/chrome")
+            QStringList tokens = expectedBin.split(QRegularExpression("[\\-_]"), Qt::SkipEmptyParts);
+            for (const QString& token : tokens) {
+                if (token.length() >= 4 && procCmd.contains(token)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+} // namespace
+
+DeckController::DeckController(
+    StateMachine& stateMachine,
+    XcbEngine& xcbEngine,
+    WindowWatcher& windowWatcher,
+    AppLauncher& appLauncher,
+    ConfigManager& config,
+    QObject* parent
+) : QObject(parent),
+    m_stateMachine(stateMachine),
+    m_xcbEngine(xcbEngine),
+    m_windowWatcher(windowWatcher),
+    m_appLauncher(appLauncher),
+    m_config(config) {}
+
+DeckController::~DeckController() {
+    static_cast<void>(m_xcbEngine.ungrabAltLeftRightKeys());
+}
+
+void DeckController::setOverlay(OverlayWindow* overlay) noexcept {
+    m_overlay = overlay;
+}
+
+void DeckController::initialize() {
+    m_decks.clear();
+    const auto& configDecks = m_config.getDecks();
+
+    for (const auto& cfg : configDecks) {
+        DeckSlot slot;
+        slot.id = cfg.id;
+        slot.name = cfg.name;
+        slot.command = cfg.command;
+        slot.color = cfg.color;
+        slot.pid = 0;
+        slot.windowId = XCB_WINDOW_NONE;
+        slot.isMapped = false;
+        m_decks.append(slot);
+    }
+
+    if (m_config.getSettings().targetWorkspace >= 0) {
+        m_assignedDesktop = static_cast<uint32_t>(m_config.getSettings().targetWorkspace);
+    } else {
+        m_assignedDesktop = m_xcbEngine.getCurrentDesktop();
+    }
+
+    // Connect WindowWatcher signals
+    connect(&m_windowWatcher, &WindowWatcher::windowMapped,
+            this, &DeckController::onWindowMapped);
+    connect(&m_windowWatcher, &WindowWatcher::windowDestroyed,
+            this, &DeckController::onWindowDestroyed);
+    connect(&m_windowWatcher, &WindowWatcher::currentDesktopChanged,
+            this, &DeckController::onCurrentDesktopChanged);
+    connect(&m_windowWatcher, &WindowWatcher::previousDeckRequested,
+            this, [this]() { switchToPreviousDeck(false); });
+    connect(&m_windowWatcher, &WindowWatcher::nextDeckRequested,
+            this, [this]() { switchToNextDeck(false); });
+
+    // Connect AppLauncher signals
+    connect(&m_appLauncher, &AppLauncher::deckLaunched,
+            this, &DeckController::onDeckLaunched);
+
+    // Connect StateMachine watchdog for emergency recovery
+    connect(&m_stateMachine, &StateMachine::watchdogTriggered, this, [this]() {
+        if (m_overlay) {
+            m_overlay->updateMask(AppState::IDLE);
+        }
+    });
+
+    // Start watching X11 window lifecycle
+    m_windowWatcher.startWatching();
+
+    // Grab Alt+Left / Alt+Right navigation hotkeys if currently on assigned desktop
+    if (m_xcbEngine.getCurrentDesktop() == m_assignedDesktop) {
+        static_cast<void>(m_xcbEngine.grabAltLeftRightKeys());
+    }
+
+    // Staggered launch of user commands
+    m_appLauncher.launchAll();
+}
+
+uint32_t DeckController::assignedDesktop() const noexcept {
+    return m_assignedDesktop;
+}
+
+int DeckController::activeDeckIndex() const noexcept {
+    return m_activeDeckIndex;
+}
+
+const QVector<DeckSlot>& DeckController::decks() const noexcept {
+    return m_decks;
+}
+
+void DeckController::onGutterClicked(int index) {
+    if (index < 0 || index >= m_decks.size()) {
+        return;
+    }
+
+    if (index == m_activeDeckIndex) {
+        qDebug() << "Gutter" << index << "is already active. No-op.";
+        return;
+    }
+
+    if (!m_stateMachine.tryTransition(AppState::IDLE, AppState::SWITCHING_OUT)) {
+        qDebug() << "Cannot switch deck: StateMachine rejected transition from"
+                 << static_cast<int>(m_stateMachine.currentState());
+        return;
+    }
+
+    // Immediately make entire canvas solid to block accidental mouse clicks
+    if (m_overlay) {
+        m_overlay->updateMask(AppState::SWITCHING_OUT);
+    }
+
+    performSwitch(index);
+}
+
+QRect DeckController::targetGeometry() const {
+    if (m_overlay) {
+        return m_overlay->geometry();
+    }
+    const auto& s = m_config.getSettings();
+    if (s.screenWidth > 0 && s.screenHeight > 0) {
+        return QRect(0, 0, s.screenWidth, s.screenHeight);
+    }
+    return m_xcbEngine.getScreenGeometry();
+}
+
+void DeckController::performSwitch(int targetDeck) {
+    if (m_overlay && m_overlay->curtain()) {
+        m_slideFromRight = (m_activeDeckIndex != -1 && targetDeck > m_activeDeckIndex);
+
+        QRect scr = targetGeometry();
+        int w = scr.width();
+        int h = scr.height();
+        QRect offscreenLeft(-w, 0, w, h);
+        QRect offscreenRight(w, 0, w, h);
+        QRect onscreen(0, 0, w, h);
+
+        QRect from = m_slideFromRight ? offscreenRight : offscreenLeft;
+
+        int duration = m_config.getSettings().animationDurationMs;
+
+        if (targetDeck >= 0 && targetDeck < m_decks.size()) {
+            m_overlay->curtain()->setColor(m_decks[targetDeck].color);
+        }
+
+        // Use Qt::SingleShotConnection to completely eliminate connection accumulation leaks
+        connect(m_overlay->curtain(), &CurtainWidget::slideComplete, this,
+                [this, targetDeck]() {
+                    onCurtainPhase1Complete(targetDeck);
+                }, Qt::SingleShotConnection);
+
+        m_overlay->curtain()->slideIn(from, onscreen, duration);
+    } else {
+        // Fallback if overlay or curtain is not present
+        onCurtainPhase1Complete(targetDeck);
+        onSwitchComplete();
+    }
+}
+
+void DeckController::onCurtainPhase1Complete(int targetDeck) {
+    // 1. Hide/minimize the outgoing active deck
+    if (m_activeDeckIndex >= 0 && m_activeDeckIndex < m_decks.size()) {
+        xcb_window_t oldWin = m_decks[m_activeDeckIndex].windowId;
+        if (oldWin != XCB_WINDOW_NONE) {
+            static_cast<void>(m_xcbEngine.minimizeWindow(oldWin));
+        }
+    }
+
+    // 2. Restore, maximize and activate the incoming target deck
+    m_activeDeckIndex = targetDeck;
+    if (m_activeDeckIndex >= 0 && m_activeDeckIndex < m_decks.size()) {
+        xcb_window_t newWin = m_decks[m_activeDeckIndex].windowId;
+        if (newWin != XCB_WINDOW_NONE) {
+            static_cast<void>(m_xcbEngine.purgeMaximizedState(newWin));
+            QRect scr = targetGeometry();
+            static_cast<void>(m_xcbEngine.restoreWindow(newWin));
+            static_cast<void>(m_xcbEngine.moveResizeWindow(newWin, scr.x(), scr.y(), scr.width(), scr.height()));
+            static_cast<void>(m_xcbEngine.activateWindow(newWin));
+        }
+    }
+
+    // 3. Update presentation active indicators and accordion layout
+    if (m_overlay) {
+        m_overlay->setActiveGutter(m_activeDeckIndex);
+    }
+
+    // 4. Transition to Phase 2 (SWITCHING_IN)
+    static_cast<void>(m_stateMachine.tryTransition(AppState::SWITCHING_OUT, AppState::SWITCHING_IN));
+
+    // 5. Sweep curtain out to reveal new deck
+    if (m_overlay && m_overlay->curtain()) {
+        QRect scr = targetGeometry();
+        int w = scr.width();
+        int h = scr.height();
+        QRect onscreen(0, 0, w, h);
+        QRect offscreenLeft(-w, 0, w, h);
+        QRect offscreenRight(w, 0, w, h);
+
+        QRect to = m_slideFromRight ? offscreenLeft : offscreenRight;
+
+        int duration = m_config.getSettings().animationDurationMs;
+
+        connect(m_overlay->curtain(), &CurtainWidget::slideComplete, this,
+                [this]() {
+                    onSwitchComplete();
+                }, Qt::SingleShotConnection);
+
+        m_overlay->curtain()->slideOut(onscreen, to, duration);
+    } else {
+        onSwitchComplete();
+    }
+}
+
+void DeckController::onSwitchComplete() {
+    static_cast<void>(m_stateMachine.tryTransition(AppState::SWITCHING_IN, AppState::IDLE));
+
+    // Re-assert target geometry on completion to lock placement
+    if (m_activeDeckIndex >= 0 && m_activeDeckIndex < m_decks.size()) {
+        xcb_window_t activeWin = m_decks[m_activeDeckIndex].windowId;
+        if (activeWin != XCB_WINDOW_NONE) {
+            QRect scr = targetGeometry();
+            static_cast<void>(m_xcbEngine.moveResizeWindow(activeWin, scr.x(), scr.y(), scr.width(), scr.height()));
+        }
+    }
+
+    if (m_overlay) {
+        m_overlay->updateMask(AppState::IDLE);
+    }
+
+    emit deckSwitched(m_activeDeckIndex);
+}
+
+void DeckController::onDeckLaunched(int index, qint64 pid, const QString& command) {
+    Q_UNUSED(command);
+    if (index >= 0 && index < m_decks.size()) {
+        m_decks[index].pid = pid;
+        m_lastLaunchedDeckIndex = index;
+        m_lastLaunchedTimestampMs = QDateTime::currentMSecsSinceEpoch();
+    }
+}
+
+void DeckController::onWindowMapped(uint32_t wid, uint32_t pid, const QString& title) {
+    QString wmClass = m_xcbEngine.getWindowClass(wid);
+    qDebug() << "Window mapped: WID =" << wid << "PID =" << pid << "Title =" << title << "WM_CLASS =" << wmClass;
+
+    int matchedIndex = -1;
+
+    // 1. Primary matching algorithm: Match by direct OS Process ID (_NET_WM_PID)
+    if (pid > 0) {
+        for (int i = 0; i < m_decks.size(); ++i) {
+            if (m_decks[i].pid == pid && m_decks[i].windowId == XCB_WINDOW_NONE) {
+                matchedIndex = i;
+                break;
+            }
+        }
+    }
+
+    // 2. Secondary matching: WM_CLASS against configured deck command
+    if (matchedIndex == -1 && !wmClass.isEmpty()) {
+        QString wmLower = wmClass.toLower();
+        for (int i = 0; i < m_decks.size(); ++i) {
+            if (m_decks[i].windowId != XCB_WINDOW_NONE) {
+                continue;
+            }
+            QString cmd = m_decks[i].command.trimmed().split(' ').first();
+            int slashIdx = cmd.lastIndexOf('/');
+            if (slashIdx >= 0) {
+                cmd = cmd.mid(slashIdx + 1);
+            }
+            cmd = cmd.toLower();
+
+            if (wmLower.contains(cmd) || cmd.contains(wmLower)) {
+                matchedIndex = i;
+                break;
+            }
+
+            QStringList tokens = cmd.split(QRegularExpression("[\\-_]"), Qt::SkipEmptyParts);
+            for (const QString& t : tokens) {
+                if (t.length() >= 4 && wmLower.contains(t)) {
+                    matchedIndex = i;
+                    break;
+                }
+            }
+            if (matchedIndex != -1) {
+                break;
+            }
+        }
+    }
+
+    // 3. Process cmdline matching: Verify if /proc/<pid>/cmdline matches configured deck command
+    if (matchedIndex == -1 && pid > 0) {
+        for (int i = 0; i < m_decks.size(); ++i) {
+            if (m_decks[i].windowId == XCB_WINDOW_NONE && matchesProcessCommand(pid, m_decks[i].command)) {
+                matchedIndex = i;
+                break;
+            }
+        }
+    }
+
+    // 4. Pending launch correlation: If a window mapped within 4s of launching a slot awaiting window
+    if (matchedIndex == -1 && m_lastLaunchedDeckIndex >= 0 && m_lastLaunchedDeckIndex < m_decks.size()) {
+        qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - m_lastLaunchedTimestampMs;
+        if (elapsed < 4000 && m_decks[m_lastLaunchedDeckIndex].windowId == XCB_WINDOW_NONE) {
+            matchedIndex = m_lastLaunchedDeckIndex;
+        }
+    }
+
+    // 5. Fallback: If only one slot is awaiting a window and PID is unknown or 0
+    if (matchedIndex == -1) {
+        int unassignedCount = 0;
+        int candidateIndex = -1;
+        for (int i = 0; i < m_decks.size(); ++i) {
+            if (m_decks[i].windowId == XCB_WINDOW_NONE) {
+                ++unassignedCount;
+                candidateIndex = i;
+            }
+        }
+        if (unassignedCount == 1) {
+            matchedIndex = candidateIndex;
+        }
+    }
+
+    if (matchedIndex != -1) {
+        qDebug() << "Attaching Window ID" << wid << "to Deck ["
+                 << m_decks[matchedIndex].name << "] (Index:" << matchedIndex << ")";
+
+        m_decks[matchedIndex].windowId = wid;
+        m_decks[matchedIndex].isMapped = true;
+        if (pid > 0) {
+            m_decks[matchedIndex].pid = pid;
+        }
+
+        static_cast<void>(m_xcbEngine.purgeMaximizedState(wid));
+        static_cast<void>(m_xcbEngine.setSkipTaskbar(wid, true));
+        static_cast<void>(m_xcbEngine.setWindowDesktop(wid, m_assignedDesktop));
+
+        QRect scr = targetGeometry();
+
+        // If no active deck exists yet or this window belongs to the active deck, activate and position it
+        if (m_activeDeckIndex == -1 || matchedIndex == m_activeDeckIndex) {
+            m_activeDeckIndex = matchedIndex;
+            static_cast<void>(m_xcbEngine.restoreWindow(wid));
+            static_cast<void>(m_xcbEngine.moveResizeWindow(wid, scr.x(), scr.y(), scr.width(), scr.height()));
+            static_cast<void>(m_xcbEngine.activateWindow(wid));
+
+            if (m_overlay) {
+                m_overlay->setActiveGutter(m_activeDeckIndex);
+            }
+        } else if (matchedIndex != m_activeDeckIndex) {
+            // Background decks should stay minimized/hidden
+            static_cast<void>(m_xcbEngine.minimizeWindow(wid));
+        }
+    }
+}
+
+void DeckController::onWindowDestroyed(uint32_t wid) {
+    for (int i = 0; i < m_decks.size(); ++i) {
+        if (m_decks[i].windowId == wid) {
+            qDebug() << "Attached window for Deck [" << m_decks[i].name << "] was destroyed.";
+            m_decks[i].windowId = XCB_WINDOW_NONE;
+            m_decks[i].isMapped = false;
+            emit deckClosed(i);
+            break;
+        }
+    }
+}
+
+void DeckController::onCurrentDesktopChanged(uint32_t currentDesktop) {
+    qDebug() << "Desktop switched to:" << currentDesktop
+             << "Assigned deck desktop:" << m_assignedDesktop;
+
+    if (!m_overlay) {
+        return;
+    }
+
+    if (currentDesktop == m_assignedDesktop) {
+        static_cast<void>(m_xcbEngine.grabAltLeftRightKeys());
+        m_overlay->show();
+        m_overlay->updateMask(m_stateMachine.currentState());
+    } else {
+        static_cast<void>(m_xcbEngine.ungrabAltLeftRightKeys());
+        m_overlay->hide();
+    }
+}
+
+void DeckController::switchToPreviousDeck(bool wrap) {
+    if (m_decks.isEmpty()) {
+        return;
+    }
+    int total = m_decks.size();
+    int current = (m_activeDeckIndex >= 0) ? m_activeDeckIndex : 0;
+    int target = current - 1;
+    if (target < 0) {
+        if (!wrap) {
+            return;
+        }
+        target = total - 1;
+    }
+    onGutterClicked(target);
+}
+
+void DeckController::switchToNextDeck(bool wrap) {
+    if (m_decks.isEmpty()) {
+        return;
+    }
+    int total = m_decks.size();
+    int current = (m_activeDeckIndex >= 0) ? m_activeDeckIndex : 0;
+    int target = current + 1;
+    if (target >= total) {
+        if (!wrap) {
+            return;
+        }
+        target = 0;
+    }
+    onGutterClicked(target);
+}
+
+void DeckController::onGutterContextMenuRequested(int index, const QPoint& globalPos) {
+    if (index < 0 || index >= m_decks.size()) {
+        return;
+    }
+
+    SleekContextMenu menu;
+    auto* editNameAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::EditName), QStringLiteral("Edit Name..."));
+    auto* editCmdAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::EditCommand), QStringLiteral("Edit Command..."));
+    auto* changeColorAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::ChangeColor), QStringLiteral("Change Color && Opacity..."));
+    auto* addDeckAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::AddDeck), QStringLiteral("Add New Deck..."));
+    auto* reorderDecksAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::ReorderDecks), QStringLiteral("Reorder Decks..."));
+    menu.addSeparator();
+    auto* deleteDeckAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::DeleteDeck), QStringLiteral("Delete Deck"));
+
+    if (m_decks.size() <= 1) {
+        deleteDeckAct->setEnabled(false);
+        deleteDeckAct->setText(QStringLiteral("Delete Deck (Last deck)"));
+    }
+
+    menu.addSeparator();
+    auto* quitAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::CloseApp), QStringLiteral("Close Gutter Deck"));
+
+    QAction* selected = menu.exec(globalPos);
+    if (!selected) {
+        return;
+    }
+
+    if (selected == editNameAct) {
+        onEditDeckName(index);
+    } else if (selected == editCmdAct) {
+        onEditDeckCommand(index);
+    } else if (selected == changeColorAct) {
+        onChangeDeckColor(index);
+    } else if (selected == addDeckAct) {
+        onAddNewDeck(index);
+    } else if (selected == reorderDecksAct) {
+        onReorderDecks();
+    } else if (selected == deleteDeckAct) {
+        onCloseDeck(index);
+    } else if (selected == quitAct) {
+        closeGutterDeck();
+    }
+}
+
+void DeckController::onEditDeckName(int index) {
+    if (index < 0 || index >= m_decks.size()) {
+        return;
+    }
+
+    SleekInputDialog dlg(
+        QStringLiteral("Edit Deck Name"),
+        QStringLiteral("Enter a label for this deck tab:"),
+        m_decks[index].name,
+        m_overlay
+    );
+    dlg.adjustSize();
+    if (m_overlay) {
+        dlg.move(m_overlay->geometry().center() - dlg.rect().center());
+    }
+
+    if (dlg.exec() == QDialog::Accepted) {
+        QString newName = dlg.value().trimmed();
+        if (!newName.isEmpty() && newName != m_decks[index].name) {
+            m_decks[index].name = newName;
+            m_config.updateDeck(index, newName, m_decks[index].command, m_decks[index].color);
+            if (m_overlay) {
+                m_overlay->updateGutterVisuals(index, newName, m_decks[index].color);
+            }
+        }
+    }
+}
+
+void DeckController::onEditDeckCommand(int index) {
+    if (index < 0 || index >= m_decks.size()) {
+        return;
+    }
+
+    SleekInputDialog dlg(
+        QStringLiteral("Edit Launch Command"),
+        QStringLiteral("Enter command or application path to execute:"),
+        m_decks[index].command,
+        m_overlay
+    );
+    dlg.adjustSize();
+    if (m_overlay) {
+        dlg.move(m_overlay->geometry().center() - dlg.rect().center());
+    }
+
+    if (dlg.exec() == QDialog::Accepted) {
+        QString newCmd = dlg.value().trimmed();
+        if (!newCmd.isEmpty() && newCmd != m_decks[index].command) {
+            m_decks[index].command = newCmd;
+            m_config.updateDeck(index, m_decks[index].name, newCmd, m_decks[index].color);
+            if (!m_decks[index].isMapped && m_decks[index].pid <= 0) {
+                m_appLauncher.launchDeck(index);
+            }
+        }
+    }
+}
+
+void DeckController::onChangeDeckColor(int index) {
+    if (index < 0 || index >= m_decks.size()) {
+        return;
+    }
+
+    SleekColorDialog dlg(m_decks[index].color, m_overlay);
+    dlg.adjustSize();
+    if (m_overlay) {
+        dlg.move(m_overlay->geometry().center() - dlg.rect().center());
+    }
+
+    if (dlg.exec() == QDialog::Accepted) {
+        QColor newColor = dlg.selectedColor();
+        if (newColor.isValid() && newColor != m_decks[index].color) {
+            m_decks[index].color = newColor;
+            m_config.updateDeck(index, m_decks[index].name, m_decks[index].command, newColor);
+            if (m_overlay) {
+                m_overlay->updateGutterVisuals(index, m_decks[index].name, newColor);
+            }
+        }
+    }
+}
+
+void DeckController::onAddNewDeck(int relativeToIndex) {
+    QString relName;
+    if (relativeToIndex >= 0 && relativeToIndex < m_decks.size()) {
+        relName = m_decks[relativeToIndex].name;
+    }
+
+    SleekAddDeckDialog dlg(relName, m_overlay);
+    dlg.adjustSize();
+    if (m_overlay) {
+        dlg.move(m_overlay->geometry().center() - dlg.rect().center());
+    }
+
+    if (dlg.exec() == QDialog::Accepted) {
+        QString name = dlg.deckName().trimmed();
+        QString cmd = dlg.deckCommand().trimmed();
+        QColor color = dlg.deckColor();
+
+        if (name.isEmpty()) {
+            name = QStringLiteral("Deck %1").arg(m_decks.size() + 1);
+        }
+        if (cmd.isEmpty()) {
+            cmd = QStringLiteral("x-terminal-emulator");
+        }
+
+        int insertIndex = m_decks.size();
+        if (relativeToIndex >= 0 && relativeToIndex < m_decks.size()) {
+            insertIndex = dlg.insertLeft() ? relativeToIndex : (relativeToIndex + 1);
+        }
+
+        QString id = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
+
+        DeckConfig newCfg;
+        newCfg.id = id;
+        newCfg.name = name;
+        newCfg.command = cmd;
+        newCfg.color = color;
+
+        if (m_config.insertDeck(insertIndex, newCfg)) {
+            DeckSlot slot;
+            slot.id = id;
+            slot.name = name;
+            slot.command = cmd;
+            slot.color = color;
+            slot.pid = 0;
+            slot.windowId = XCB_WINDOW_NONE;
+            slot.isMapped = false;
+            m_decks.insert(insertIndex, slot);
+            m_appLauncher.insertDeck(insertIndex);
+
+            if (m_activeDeckIndex >= 0 && m_activeDeckIndex >= insertIndex) {
+                m_activeDeckIndex++;
+            }
+
+            if (m_overlay) {
+                m_overlay->rebuildGutters();
+                m_overlay->setActiveGutter(m_activeDeckIndex);
+            }
+
+            m_appLauncher.launchDeck(insertIndex);
+        }
+    }
+}
+
+void DeckController::onReorderDecks() {
+    if (m_decks.size() <= 1) {
+        return;
+    }
+
+    QVector<DeckItemInfo> items;
+    items.reserve(m_decks.size());
+    for (int i = 0; i < m_decks.size(); ++i) {
+        items.append(DeckItemInfo{i, m_decks[i].name, m_decks[i].command, m_decks[i].color});
+    }
+
+    SleekReorderDialog dlg(items, m_activeDeckIndex, m_overlay);
+    dlg.adjustSize();
+    if (m_overlay) {
+        dlg.move(m_overlay->geometry().center() - dlg.rect().center());
+    }
+
+    if (dlg.exec() == QDialog::Accepted) {
+        QVector<int> newOrder = dlg.newOrder();
+        if (newOrder.size() != m_decks.size()) {
+            return;
+        }
+
+        m_config.reorderDecks(newOrder);
+        m_appLauncher.reorderDecks(newOrder);
+
+        QVector<DeckSlot> reorderedSlots;
+        reorderedSlots.reserve(newOrder.size());
+        for (int oldIdx : newOrder) {
+            reorderedSlots.append(m_decks[oldIdx]);
+        }
+        m_decks = std::move(reorderedSlots);
+
+        if (m_activeDeckIndex >= 0) {
+            int newActive = newOrder.indexOf(m_activeDeckIndex);
+            m_activeDeckIndex = (newActive >= 0) ? newActive : 0;
+        }
+
+        if (m_overlay) {
+            m_overlay->rebuildGutters();
+            m_overlay->setActiveGutter(m_activeDeckIndex);
+        }
+    }
+}
+
+void DeckController::onCloseDeck(int index) {
+    if (index < 0 || index >= m_decks.size() || m_decks.size() <= 1) {
+        return;
+    }
+
+    qint64 pid = m_decks[index].pid;
+    xcb_window_t winId = m_decks[index].windowId;
+
+    if (winId != XCB_WINDOW_NONE) {
+        static_cast<void>(m_xcbEngine.restoreWindow(winId));
+        static_cast<void>(m_xcbEngine.closeWindow(winId));
+    } else if (pid > 0) {
+        ::kill(static_cast<pid_t>(pid), SIGTERM);
+    }
+
+    int oldActive = m_activeDeckIndex;
+    int nextActive = oldActive;
+
+    if (oldActive == index) {
+        if (index > 0) {
+            nextActive = index - 1;
+        } else {
+            nextActive = 0;
+        }
+    } else if (oldActive > index) {
+        nextActive = oldActive - 1;
+    }
+
+    m_decks.removeAt(index);
+    m_appLauncher.removeDeck(index);
+    m_config.removeDeck(index);
+
+    emit deckClosed(index);
+
+    if (m_overlay) {
+        m_overlay->rebuildGutters();
+    }
+
+    if (oldActive == index) {
+        m_activeDeckIndex = -1;
+        if (nextActive >= 0 && nextActive < m_decks.size()) {
+            onGutterClicked(nextActive);
+        }
+    } else {
+        m_activeDeckIndex = nextActive;
+        if (m_overlay) {
+            m_overlay->setActiveGutter(m_activeDeckIndex);
+        }
+    }
+}
+
+void DeckController::closeGutterDeck() {
+    qDebug() << "Closing Gutter Deck: gracefully closing all managed deck windows...";
+
+    static_cast<void>(m_xcbEngine.ungrabAltLeftRightKeys());
+
+    // 1. Hide overlay window immediately so the desktop is instantly responsive
+    if (m_overlay) {
+        m_overlay->hide();
+    }
+
+    // 2. Restore minimized windows and send graceful close requests
+    QVector<xcb_window_t> pendingWindows;
+    QVector<qint64> pendingPids;
+
+    for (const auto& deck : m_decks) {
+        if (deck.windowId != XCB_WINDOW_NONE) {
+            static_cast<void>(m_xcbEngine.restoreWindow(deck.windowId));
+            static_cast<void>(m_xcbEngine.closeWindow(deck.windowId));
+            pendingWindows.append(deck.windowId);
+        }
+        if (deck.pid > 0) {
+            pendingPids.append(deck.pid);
+        }
+    }
+
+    // 3. Graceful wait loop: allow applications up to 2500ms to save sessions and exit cleanly
+    QElapsedTimer timer;
+    timer.start();
+
+    while (timer.elapsed() < 2500) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+
+        auto liveWindows = m_xcbEngine.getTopLevelWindows();
+        bool anyWindowAlive = false;
+        for (xcb_window_t wid : pendingWindows) {
+            if (liveWindows.contains(wid)) {
+                anyWindowAlive = true;
+                break;
+            }
+        }
+
+        bool anyPidAlive = false;
+        for (qint64 pid : pendingPids) {
+            if (::kill(static_cast<pid_t>(pid), 0) == 0) {
+                anyPidAlive = true;
+                break;
+            }
+        }
+
+        if (!anyWindowAlive && !anyPidAlive) {
+            qDebug() << "All deck applications closed cleanly in" << timer.elapsed() << "ms.";
+            break;
+        }
+
+        QThread::msleep(50);
+    }
+
+    // 4. Forceful fallback ONLY for applications that hung or failed to exit within the grace period
+    auto remainingWindows = m_xcbEngine.getTopLevelWindows();
+    for (xcb_window_t wid : pendingWindows) {
+        if (remainingWindows.contains(wid)) {
+            qWarning() << "Window" << wid << "unresponsive after grace period, forcing killClient.";
+            static_cast<void>(m_xcbEngine.killClient(wid));
+        }
+    }
+    for (qint64 pid : pendingPids) {
+        if (::kill(static_cast<pid_t>(pid), 0) == 0) {
+            qWarning() << "PID" << pid << "unresponsive after grace period, sending SIGTERM.";
+            ::kill(static_cast<pid_t>(pid), SIGTERM);
+        }
+    }
+
+    QApplication::quit();
+}

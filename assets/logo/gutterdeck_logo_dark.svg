@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 720" width="800" height="720">
+  <defs>
+    <!-- Background Gradient for Icon Squircle -->
+    <linearGradient id="iconBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#181924"/>
+      <stop offset="100%" stop-color="#0b0c12"/>
+    </linearGradient>
+
+    <!-- 10 Distinct Barcode Color Gradients -->
+    <linearGradient id="g1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38e2fc"/><stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7dd3fc"/><stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <linearGradient id="g3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/><stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="g4" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc"/><stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <linearGradient id="g5" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f472b6"/><stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+    <linearGradient id="g6" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fb7185"/><stop offset="100%" stop-color="#f43f5e"/>
+    </linearGradient>
+    <linearGradient id="g7" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fdba74"/><stop offset="100%" stop-color="#fb923c"/>
+    </linearGradient>
+    <linearGradient id="g8" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fde047"/><stop offset="100%" stop-color="#eab308"/>
+    </linearGradient>
+    <linearGradient id="g9" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="g10" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#67e8f9"/><stop offset="100%" stop-color="#00f2fe"/>
+    </linearGradient>
+
+    <!-- Deck Text Gradient: Electric Sky to Hot Pink -->
+    <linearGradient id="deckGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="45%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#ec4899"/>
+    </linearGradient>
+
+    <!-- Soft Ambient Backlight Glow for Icon -->
+    <radialGradient id="ambientGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.32"/>
+      <stop offset="50%" stop-color="#06b6d4" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="32"/>
+    </filter>
+
+    <filter id="shadowBlur" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+  </defs>
+
+  <rect width="800" height="720" fill="#0d0e15"/>
+
+  <!-- Ambient Glow Behind Icon -->
+  <circle cx="400" cy="240" r="230" fill="url(#ambientGlow)" filter="url(#softGlow)"/>
+
+  <!-- ================= ICON (360x360, centered at X=400, Y=60..420) ================= -->
+  <g transform="translate(220, 60)">
+    <!-- Drop Shadow Rect -->
+    <rect x="14" y="24" width="332" height="332" rx="78.75" ry="78.75"
+          fill="#000000" opacity="0.65" filter="url(#shadowBlur)"/>
+
+    <!-- Squircle Background -->
+    <rect x="14" y="14" width="332" height="332" rx="78.75" ry="78.75"
+          fill="url(#iconBgGrad)" stroke="#ffffff" stroke-opacity="0.16" stroke-width="3.2"/>
+
+    <!-- Inner Barcode Stack (scale 360 / 256 = 1.40625) -->
+    <g transform="scale(1.40625)">
+      <rect x="32" y="36" width="16" height="184" rx="5" ry="5" fill="url(#g1)"/>
+      <rect x="54" y="46" width="9" height="164" rx="4.5" ry="4.5" fill="url(#g2)"/>
+      <rect x="68" y="46" width="22" height="164" rx="5" ry="5" fill="url(#g3)"/>
+      <rect x="95" y="46" width="11" height="164" rx="5" ry="5" fill="url(#g4)"/>
+      <rect x="111" y="36" width="15" height="184" rx="5" ry="5" fill="url(#g5)"/>
+      <rect x="131" y="46" width="25" height="164" rx="5" ry="5" fill="url(#g6)"/>
+      <rect x="161" y="46" width="9" height="164" rx="4.5" ry="4.5" fill="url(#g7)"/>
+      <rect x="175" y="46" width="17" height="164" rx="5" ry="5" fill="url(#g8)"/>
+      <rect x="197" y="46" width="10" height="164" rx="5" ry="5" fill="url(#g9)"/>
+      <rect x="212" y="36" width="16" height="184" rx="5" ry="5" fill="url(#g10)"/>
+    </g>
+  </g>
+
+  <!-- ================= TYPOGRAPHY UNDERNEATH ================= -->
+  <!-- Main Brand Name: gutterDeck -->
+  <text x="400" y="505" text-anchor="middle"
+        font-family="'Inter', 'Liberation Sans', 'DejaVu Sans', -apple-system, sans-serif"
+        font-size="82" font-weight="400" letter-spacing="-1.5px">
+    <tspan fill="#F8FAFC" font-weight="400">gutter</tspan><tspan fill="url(#deckGrad)" font-weight="800">Deck</tspan>
+  </text>
+
+  <!-- Subtitle Tagline -->
+  <text x="400" y="562" text-anchor="middle"
+        font-family="'Inter', 'Liberation Sans', 'DejaVu Sans', sans-serif"
+        font-size="13.5" font-weight="700" letter-spacing="9.5px" fill="#94A3B8">
+    DESKTOP COMPOSITOR DOCK
+  </text>
+
+  <!-- Mini Signature Color Palette Accent -->
+  <g transform="translate(341, 595)">
+    <rect x="0"   y="0" width="8" height="3.5" rx="1.75" fill="#06b6d4"/>
+    <rect x="13"  y="0" width="8" height="3.5" rx="1.75" fill="#38bdf8"/>
+    <rect x="26"  y="0" width="8" height="3.5" rx="1.75" fill="#6366f1"/>
+    <rect x="39"  y="0" width="8" height="3.5" rx="1.75" fill="#a855f7"/>
+    <rect x="52"  y="0" width="8" height="3.5" rx="1.75" fill="#ec4899"/>
+    <rect x="65"  y="0" width="8" height="3.5" rx="1.75" fill="#f43f5e"/>
+    <rect x="78"  y="0" width="8" height="3.5" rx="1.75" fill="#fb923c"/>
+    <rect x="91"  y="0" width="8" height="3.5" rx="1.75" fill="#eab308"/>
+    <rect x="104" y="0" width="8" height="3.5" rx="1.75" fill="#10b981"/>
+    <rect x="117" y="0" width="8" height="3.5" rx="1.75" fill="#00f2fe"/>
+  </g>
+</svg>
