@@ -17,6 +17,7 @@ private slots:
     void testColorDialogProperties();
     void testAddDeckDialogProperties();
     void testReorderDialogProperties();
+    void testDarkModePaletteAndSwatches();
     void testGutterWidgetSwellStages();
     void testGutterWidgetInactiveZone();
     void testGutterWidgetWheelNavigation();
@@ -166,6 +167,79 @@ void TestSleekDialogs::testReorderDialogProperties() {
 
     // At bottom row (2), downBtn should be disabled
     QVERIFY(!downBtn->isEnabled());
+}
+
+void TestSleekDialogs::testDarkModePaletteAndSwatches() {
+    const auto& palette = getSleekDarkPalette();
+    QCOMPARE(palette.size(), 24);
+
+    // Verify all colors are valid hex codes
+    for (const auto& hex : palette) {
+        QColor c(hex);
+        QVERIFY2(c.isValid(), qPrintable(QString("Invalid color: %1").arg(hex)));
+    }
+
+    // Verify presence of key dark mode hue families
+    // Blues
+    QVERIFY(palette.contains(QStringLiteral("#172554")));
+    QVERIFY(palette.contains(QStringLiteral("#2563eb")));
+    QVERIFY(palette.contains(QStringLiteral("#38bdf8"))); // bright accent
+
+    // Greens
+    QVERIFY(palette.contains(QStringLiteral("#14532d")));
+    QVERIFY(palette.contains(QStringLiteral("#16a34a")));
+    QVERIFY(palette.contains(QStringLiteral("#10b981"))); // bright accent
+
+    // Reds
+    QVERIFY(palette.contains(QStringLiteral("#7f1d1d")));
+    QVERIFY(palette.contains(QStringLiteral("#dc2626")));
+    QVERIFY(palette.contains(QStringLiteral("#f43f5e"))); // bright accent
+
+    // Oranges
+    QVERIFY(palette.contains(QStringLiteral("#7c2d12")));
+    QVERIFY(palette.contains(QStringLiteral("#c2410c")));
+    QVERIFY(palette.contains(QStringLiteral("#fb923c"))); // bright accent
+
+    // Verify SleekColorDialog swatches
+    SleekColorDialog colorDlg(QColor("#172554"));
+    auto colorButtons = colorDlg.findChildren<QPushButton*>();
+    // SleekColorDialog has 24 swatch buttons + Cancel + Apply buttons = 26 buttons
+    int swatchCount = 0;
+    for (auto* btn : colorButtons) {
+        if (btn->maximumSize() == QSize(28, 28)) {
+            swatchCount++;
+        }
+    }
+    QCOMPARE(swatchCount, 24);
+
+    // Click on a bright accent swatch (e.g. #38bdf8)
+    for (auto* btn : colorButtons) {
+        if (btn->styleSheet().contains("#38bdf8")) {
+            btn->click();
+            break;
+        }
+    }
+    QCOMPARE(colorDlg.selectedColor().name(QColor::HexRgb).toLower(), QString("#38bdf8"));
+
+    // Verify SleekAddDeckDialog swatches
+    SleekAddDeckDialog addDlg("Deck 1");
+    auto addButtons = addDlg.findChildren<QPushButton*>();
+    int addSwatchCount = 0;
+    for (auto* btn : addButtons) {
+        if (btn->maximumSize() == QSize(26, 26)) {
+            addSwatchCount++;
+        }
+    }
+    QCOMPARE(addSwatchCount, 24);
+
+    // Click on a bright orange accent swatch (e.g. #fb923c)
+    for (auto* btn : addButtons) {
+        if (btn->styleSheet().contains("#fb923c")) {
+            btn->click();
+            break;
+        }
+    }
+    QCOMPARE(addDlg.deckColor().name(QColor::HexRgb).toLower(), QString("#fb923c"));
 }
 
 void TestSleekDialogs::testGutterWidgetSwellStages() {

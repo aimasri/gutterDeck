@@ -361,11 +361,35 @@ void SleekInputDialog::keyPressEvent(QKeyEvent* event) {
 }
 
 // ==========================================
+// Dark Mode Palette
+// ==========================================
+const QVector<QString>& getSleekDarkPalette() {
+    static const QVector<QString> s_palette = {
+        // Row 1: Blues (Deep -> Mid -> Bright Accents)
+        QStringLiteral("#172554"), QStringLiteral("#1e3a5f"), QStringLiteral("#284b63"),
+        QStringLiteral("#2563eb"), QStringLiteral("#38bdf8"), QStringLiteral("#06b6d4"),
+
+        // Row 2: Greens (Deep -> Mid -> Bright Accents)
+        QStringLiteral("#14532d"), QStringLiteral("#134e4a"), QStringLiteral("#0f766e"),
+        QStringLiteral("#16a34a"), QStringLiteral("#10b981"), QStringLiteral("#4ade80"),
+
+        // Row 3: Reds (Deep -> Mid -> Bright Accents)
+        QStringLiteral("#5c1d24"), QStringLiteral("#7f1d1d"), QStringLiteral("#991b1b"),
+        QStringLiteral("#dc2626"), QStringLiteral("#f43f5e"), QStringLiteral("#fb7185"),
+
+        // Row 4: Oranges & Ambers (Deep -> Mid -> Bright Accents)
+        QStringLiteral("#7c2d12"), QStringLiteral("#9a3412"), QStringLiteral("#c2410c"),
+        QStringLiteral("#ea580c"), QStringLiteral("#fb923c"), QStringLiteral("#ffb74d")
+    };
+    return s_palette;
+}
+
+// ==========================================
 // SleekColorDialog
 // ==========================================
 SleekColorDialog::SleekColorDialog(const QColor& initialColor, QWidget* parent)
     : QDialog(parent),
-      m_color(initialColor.isValid() ? initialColor : QColor("#806366F1")) {
+      m_color(initialColor.isValid() ? initialColor : QColor("#802563eb")) {
 
     setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -387,21 +411,18 @@ SleekColorDialog::SleekColorDialog(const QColor& initialColor, QWidget* parent)
     titleLbl->setObjectName("titleLabel");
     cardLayout->addWidget(titleLbl);
 
-    // 1. Palette Swatch Grid
+    // 1. Palette Swatch Grid (24 Modern Dark Mode Swatches: 4 rows x 6 cols)
     auto* gridLayout = new QGridLayout();
     gridLayout->setSpacing(8);
+    gridLayout->setAlignment(Qt::AlignCenter);
 
-    const QVector<QString> palette = {
-        "#ef4444", "#f97316", "#f59e0b", "#10b981",
-        "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6",
-        "#ec4899", "#64748b", "#22c55e", "#14b8a6",
-        "#a855f7", "#e11d48", "#334155", "#27272a"
-    };
+    const auto& palette = getSleekDarkPalette();
 
     for (int i = 0; i < palette.size(); ++i) {
         QColor c(palette[i]);
         auto* swatchBtn = new QPushButton(card);
         swatchBtn->setFixedSize(28, 28);
+        swatchBtn->setCursor(Qt::PointingHandCursor);
         swatchBtn->setStyleSheet(QString(
             "QPushButton {"
             "    background-color: %1;"
@@ -415,7 +436,7 @@ SleekColorDialog::SleekColorDialog(const QColor& initialColor, QWidget* parent)
         connect(swatchBtn, &QPushButton::clicked, this, [this, c]() {
             onSwatchClicked(c);
         });
-        gridLayout->addWidget(swatchBtn, i / 4, i % 4);
+        gridLayout->addWidget(swatchBtn, i / 6, i % 6);
     }
     cardLayout->addLayout(gridLayout);
 
@@ -535,7 +556,7 @@ QColor SleekColorDialog::selectedColor() const {
 // ==========================================
 SleekAddDeckDialog::SleekAddDeckDialog(const QString& relativeDeckName, QWidget* parent)
     : QDialog(parent),
-      m_selectedColor(QColor("#806366F1")) {
+      m_selectedColor(QColor("#802563eb")) {
 
     setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -601,23 +622,22 @@ SleekAddDeckDialog::SleekAddDeckDialog(const QString& relativeDeckName, QWidget*
     radioLayout->addStretch(1);
     cardLayout->addLayout(radioLayout);
 
-    // Color Swatches
+    // Color Swatches (24 Modern Dark Mode Swatches: 4 rows x 6 cols)
     auto* colorLbl = new QLabel("Deck Tint:", card);
     colorLbl->setObjectName("subLabel");
     cardLayout->addWidget(colorLbl);
 
     auto* gridLayout = new QGridLayout();
     gridLayout->setSpacing(6);
+    gridLayout->setAlignment(Qt::AlignCenter);
 
-    const QVector<QString> palette = {
-        "#ef4444", "#f97316", "#f59e0b", "#10b981",
-        "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6"
-    };
+    const auto& palette = getSleekDarkPalette();
 
     for (int i = 0; i < palette.size(); ++i) {
         QColor c(palette[i]);
         auto* swatchBtn = new QPushButton(card);
         swatchBtn->setFixedSize(26, 26);
+        swatchBtn->setCursor(Qt::PointingHandCursor);
         swatchBtn->setStyleSheet(QString(
             "QPushButton { background-color: %1; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; }"
             "QPushButton:hover { border: 2px solid #ffffff; }"
@@ -625,7 +645,7 @@ SleekAddDeckDialog::SleekAddDeckDialog(const QString& relativeDeckName, QWidget*
         connect(swatchBtn, &QPushButton::clicked, this, [this, c]() {
             onSwatchClicked(c);
         });
-        gridLayout->addWidget(swatchBtn, i / 4, i % 4);
+        gridLayout->addWidget(swatchBtn, i / 6, i % 6);
     }
     cardLayout->addLayout(gridLayout);
 

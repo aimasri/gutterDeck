@@ -36,6 +36,11 @@ enum class SleekMenuIcon {
 [[nodiscard]] QIcon getSleekMenuIcon(SleekMenuIcon type);
 
 /**
+ * @brief Returns the curated 24-color dark-mode palette organized across blues, greens, reds, and oranges.
+ */
+[[nodiscard]] const QVector<QString>& getSleekDarkPalette();
+
+/**
  * @brief Sleek, dark minimalist context menu for gutter tabs.
  */
 class SleekContextMenu : public QMenu {

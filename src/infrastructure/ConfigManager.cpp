@@ -32,14 +32,14 @@ void ConfigManager::populateDefaultDecks() {
     deck1.id = "gutter_1";
     deck1.name = "Browser";
     deck1.command = "google-chrome --new-window";
-    deck1.color = QColor("#80FF5555");
+    deck1.color = QColor("#802563eb");
     m_decks.append(deck1);
 
     DeckConfig deck2;
     deck2.id = "gutter_2";
     deck2.name = "Terminal";
     deck2.command = "x-terminal-emulator";
-    deck2.color = QColor("#805555FF");
+    deck2.color = QColor("#8010b981");
     m_decks.append(deck2);
 }
 
@@ -250,7 +250,7 @@ bool ConfigManager::addDeck(const DeckConfig& deck) {
         newDeck.name = QString("Deck %1").arg(m_decks.size() + 1);
     }
     if (!newDeck.color.isValid()) {
-        newDeck.color = QColor("#806366F1");
+        newDeck.color = QColor("#802563eb");
     }
     m_decks.append(newDeck);
     validate();
@@ -266,7 +266,7 @@ bool ConfigManager::insertDeck(int index, const DeckConfig& deck) {
         newDeck.name = QString("Deck %1").arg(m_decks.size() + 1);
     }
     if (!newDeck.color.isValid()) {
-        newDeck.color = QColor("#806366F1");
+        newDeck.color = QColor("#802563eb");
     }
     int clampedIndex = std::max(0, std::min(index, static_cast<int>(m_decks.size())));
     m_decks.insert(clampedIndex, newDeck);

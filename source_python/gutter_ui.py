@@ -69,17 +69,21 @@ class CustomColorDialog(QDialog):
         self.layout = QVBoxLayout(self)
         
         self.color_grid = QGridLayout()
-        # 24 Modern Dark Mode Colors from user palette
+        # 24 Modern Dark Mode Colors across Blues, Greens, Reds, and Oranges
         self.colors = [
-            "#121212", "#1F1F1F", "#2C2C2C", "#363636", "#585858", "#8D99AE",
-            "#1D3557", "#457B9D", "#284B63", "#264653", "#1A535C", "#008080",
-            "#2A9D8F", "#457B5D", "#228B22", "#006400", "#5E503F", "#7E705F",
-            "#9A8C7A", "#A52A2A", "#8B0000", "#B22222", "#FF6347", "#FFB74D"
+            # Blues
+            "#172554", "#1E3A5F", "#284B63", "#2563EB", "#38BDF8", "#06B6D4",
+            # Greens
+            "#14532D", "#134E4A", "#0F766E", "#16A34A", "#10B981", "#4ADE80",
+            # Reds
+            "#5C1D24", "#7F1D1D", "#991B1B", "#DC2626", "#F43F5E", "#FB7185",
+            # Oranges & Ambers
+            "#7C2D12", "#9A3412", "#C2410C", "#EA580C", "#FB923C", "#FFB74D"
         ]
         
         self.selected_hex = current_color.name()[:7].upper()
         if self.selected_hex not in self.colors:
-            self.selected_hex = "#1D3557"
+            self.selected_hex = "#2563EB"
             
         self.opacity = current_color.alpha()
         self.buttons = []
