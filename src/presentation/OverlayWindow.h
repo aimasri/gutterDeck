@@ -25,6 +25,7 @@ enum class AppState;
 class OverlayWindow : public QWidget {
     Q_OBJECT
 public:
+    void setHoverLock(bool locked);
     /**
      * @brief Constructs overlay window sized to screen geometry.
      * @param config Reference to application configuration.
@@ -110,6 +111,7 @@ private slots:
     void onLeaveDebounceTimeout();
 
 private:
+    bool m_hoverLock = false;
     const ConfigManager& m_config;
     class QHBoxLayout* m_mainLayout = nullptr;
     CurtainWidget* m_curtain = nullptr;

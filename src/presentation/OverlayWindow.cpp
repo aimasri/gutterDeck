@@ -244,6 +244,18 @@ void OverlayWindow::onGutterHoverLeft(int index) {
 }
 
 void OverlayWindow::onLeaveDebounceTimeout() {
+    if (m_hoverLock) return;
+
+    bool isHovering = false;
+    for (auto* gutter : m_gutters) {
+        if (gutter->underMouse()) {
+            isHovering = true;
+            break;
+        }
+    }
+
+    if (isHovering) return;
+
     for (auto* gutter : m_gutters) {
         gutter->setSwellStage(SwellStage::Collapsed);
     }
@@ -323,4 +335,11 @@ void OverlayWindow::rebuildGutters() {
 
     // 4. Reconstruct layout and refresh mask
     rebuildAccordionLayout(m_currentActiveIndex);
+}
+
+void OverlayWindow::setHoverLock(bool locked) {
+    m_hoverLock = locked;
+    if (!m_hoverLock) {
+        onLeaveDebounceTimeout();
+    }
 }

@@ -784,7 +784,9 @@ void DeckController::onGutterContextMenuRequested(int index, const QPoint& globa
     menu.addSeparator();
     auto* quitAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::CloseApp), QStringLiteral("Close Gutter Deck"));
 
+    if (m_overlay) m_overlay->setHoverLock(true);
     QAction* selected = menu.exec(globalPos);
+    if (m_overlay) m_overlay->setHoverLock(false);
     if (!selected) {
         return;
     }
