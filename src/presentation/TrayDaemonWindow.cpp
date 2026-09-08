@@ -169,7 +169,7 @@ QMenu* TrayDaemonWindow::createInactiveProfileMenu(const QString& profileId, con
         auto* s = screens[i];
         auto* action = m->addAction(QString("Launch on Display %1 (%2)").arg(i + 1).arg(s->name()));
         connect(action, &QAction::triggered, [profileId, s]() {
-            QProcess::startDetached("gutterdeck", QStringList() << "-p" << profileId << "--screen" << s->name());
+            QProcess::startDetached(QCoreApplication::applicationFilePath(), QStringList() << "-p" << profileId << "--screen" << s->name());
         });
     }
     
