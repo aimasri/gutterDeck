@@ -380,16 +380,29 @@ gutterDeck supports powerful native split-screen functionality that allows you t
 
 ---
 
-### Procedural Barcode System Tray Icon
+### Global IPC System Tray Daemon
 
-gutterDeck features a custom-designed, multi-colored **barcode-style application icon**:
+gutterDeck features a highly advanced, unified system tray manager running as a detached headless daemon (`gutterdeck --tray`). When multiple profiles are launched, they communicate with the daemon seamlessly via Inter-Process Communication (IPC) using `QLocalSocket`:
+- **Single Global Presence:** Instead of cluttering your taskbar with multiple icons, the daemon hosts a single, custom procedural barcode icon.
+- **Dynamic Context Menus:** Right-clicking the tray builds a hierarchical menu of both your Active and Inactive profiles.
+- **IPC Remote Control:** Interacting with an Active profile from the tray instantly fires signals over the local socket to the respective running instance, flawlessly executing `Ctrl+Left/Right` navigation, or spawning native dark-modal config editors directly on the target screen.
+- **Inactive Profile Spawning:** Selecting an Inactive profile from the menu auto-discovers your attached monitors and lets you spawn a new hardware-accelerated overlay explicitly onto the screen of your choice (e.g. `Launch on Display 2 (HDMI-1)`).
 
-- **Visual Design:** 10 vibrant, distinct neon color bars (Electric Cyan, Sky Blue, Vivid Indigo, Neon Purple, Hot Pink, Coral Crimson, Bright Orange, Electric Gold, Emerald Green, Neon Mint) with varying stroke widths and extended guard bars, set against an obsidian squircle (`#181924`).
+---
+
+### Global Mouse-Wheel Navigation
+
+gutterDeck hooks deeply into the native X11 display server via `xcb_grab_button` to intercept global mouse scroll events. 
+- **The Magic:** From anywhere on your screen, without ever having to move your mouse back to the physical edge gutters, simply hold `Ctrl + Shift` and scroll your mouse wheel. 
+- **The Result:** The event bypasses your active application entirely and natively commands gutterDeck to whip the curtain back and forth across your decks in 250 milliseconds.
+
+---
+
+### Procedural Barcode Icon Design
+
+The unified tray daemon boasts a multi-colored **barcode-style application icon**:
+- **Visual Design:** 10 vibrant, distinct neon color bars (Electric Cyan, Sky Blue, Vivid Indigo, Neon Purple, Hot Pink, Coral Crimson, Bright Orange, Electric Gold, Emerald Green, Neon Mint) set against an obsidian squircle (`#181924`).
 - **Procedural Rendering:** Rendered natively via `QPainter` in `AppIcon.cpp` across multiple resolutions (16, 24, 32, 48, 64, 128, 256, 512px) with zero external PNG/SVG asset dependencies.
-- **System Tray Integration (`tint2` / Panel):**
-  - Sits directly in your desktop system tray panel.
-  - **Left Click:** Instantly cycles to the next deck.
-  - **Right Click:** Opens the full gutterDeck management context menu.
 
 ---
 

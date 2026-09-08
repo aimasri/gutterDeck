@@ -44,7 +44,7 @@ This document serves as the canonical feature roadmap and architectural plan for
 
 ---
 
-## Phase 3: Deck Customization & Lifecycle Management
+## Phase 3: Deck Customization & Lifecycle Management (Completed ✅)
 
 ### 1. Right-Click Context Menu
 - Right-clicking any gutter tab brings up an Openbox-styled dark context menu with options:
@@ -60,6 +60,19 @@ This document serves as the canonical feature roadmap and architectural plan for
 
 ### 3. Real-Time Configuration Persistence
 - Any additions, modifications, renames, or deletions made through the UI are immediately serialized back to `~/.config/gutter-deck/config.json`.
+
+---
+
+## Phase 3.5: Global Systems & Navigation (Completed ✅)
+
+### 1. Global IPC Tray Daemon (`gutterdeck --tray`)
+- **Concept:** A headless daemon process acting as a unified system tray manager for all running profiles across multiple displays.
+- **Architecture:** `QLocalServer`/`QLocalSocket` IPC backend. Instances automatically spawn the daemon if missing, and register themselves.
+- **Features:** Right-click menu dynamically lists active/inactive profiles, sends editing commands back to instances, and auto-discovers monitors for inactive profile spawning.
+
+### 2. Global Mouse-Wheel Scrolling
+- **Concept:** Native X11 grab of Button 4 and Button 5 with `ControlMask | ShiftMask`.
+- **Behavior:** Holding `Ctrl + Shift` and scrolling the mouse anywhere on the screen bypasses the active application and seamlessly cycles the gutterDeck curtains.
 
 ---
 
