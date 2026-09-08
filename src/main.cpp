@@ -140,7 +140,9 @@ int main(int argc, char* argv[]) {
             ? QGuiApplication::primaryScreen()->geometry() 
             : xcbEngine.getScreenGeometry();
         const auto& settings = config.getSettings();
-        if (settings.targetScreen == "auto" || settings.targetScreen.isEmpty()) {
+        QString cliScreen = parser.isSet(screenOpt) ? parser.value(screenOpt) : QString();
+        QString effectiveTargetScreen = !cliScreen.isEmpty() ? cliScreen : settings.targetScreen;
+        if (effectiveTargetScreen == "auto" || effectiveTargetScreen.isEmpty()) {
             QPoint cursorPos = QCursor::pos();
             QScreen* cursorScreen = QGuiApplication::screenAt(cursorPos);
             if (cursorScreen) {
@@ -154,7 +156,7 @@ int main(int argc, char* argv[]) {
         } else {
             bool found = false;
             for (auto* s : QGuiApplication::screens()) {
-                if (s->name() == settings.targetScreen) {
+                if (s->name() == effectiveTargetScreen) {
                     screenGeometry = s->geometry();
                     found = true;
                     qDebug() << "Using target screen by name:" << s->name() << ":" << screenGeometry;
