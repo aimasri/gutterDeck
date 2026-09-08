@@ -78,6 +78,7 @@ void XcbEngine::initAtoms() {
     m_net_wm_desktop = getAtom("_NET_WM_DESKTOP");
     m_net_moveresize_window = getAtom("_NET_MOVERESIZE_WINDOW");
     m_net_close_window = getAtom("_NET_CLOSE_WINDOW");
+    m_net_wm_icon = getAtom("_NET_WM_ICON");
 }
 
 bool XcbEngine::sendClientMessage(xcb_window_t targetWindow, xcb_atom_t messageType,
@@ -482,4 +483,43 @@ bool XcbEngine::isPreviousKey(xcb_keycode_t detail) const noexcept {
 
 bool XcbEngine::isNextKey(xcb_keycode_t detail) const noexcept {
     return (detail != 0 && (detail == m_rightKeycode || detail == m_sKeycode));
+}
+
+bool XcbEngine::overrideWindowIconAndClass(xcb_window_t windowId, const QString& className, const QImage& icon) {
+    if (!m_xcbConn || windowId == XCB_WINDOW_NONE) return false;
+
+    QByteArray classBytes = className.toLocal8Bit();
+    QByteArray propData;
+    propData.append(classBytes);
+    propData.append('\0');
+    propData.append(classBytes);
+    propData.append('\0');
+
+    xcb_change_property(m_xcbConn, XCB_PROP_MODE_REPLACE, windowId,
+                        XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 8,
+                        propData.size(), propData.constData());
+
+    if (!icon.isNull() && m_net_wm_icon != XCB_NONE) {
+        QImage formatted = icon.convertToFormat(QImage::Format_ARGB32);
+        int w = formatted.width();
+        int h = formatted.height();
+        
+        QVector<uint32_t> iconData;
+        iconData.reserve(2 + w * h);
+        iconData.append(w);
+        iconData.append(h);
+        
+        for (int y = 0; y < h; ++y) {
+            const QRgb* scanline = reinterpret_cast<const QRgb*>(formatted.constScanLine(y));
+            for (int x = 0; x < w; ++x) {
+                iconData.append(scanline[x]);
+            }
+        }
+        
+        xcb_change_property(m_xcbConn, XCB_PROP_MODE_REPLACE, windowId,
+                            m_net_wm_icon, XCB_ATOM_CARDINAL, 32,
+                            iconData.size(), iconData.constData());
+    }
+    m_conn.flush();
+    return true;
 }

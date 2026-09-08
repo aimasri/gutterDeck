@@ -2,6 +2,7 @@
 
 #include <QRect>
 #include <QString>
+#include <QImage>
 #include <QVector>
 #include <memory>
 #include <unordered_map>
@@ -53,6 +54,7 @@ public:
     [[nodiscard]] bool setWindowAbove(xcb_window_t windowId, bool above);
     [[nodiscard]] bool raiseWindow(xcb_window_t windowId);
     [[nodiscard]] bool setWindowDesktop(xcb_window_t windowId, uint32_t desktop);
+    [[nodiscard]] bool overrideWindowIconAndClass(xcb_window_t windowId, const QString& className, const QImage& icon);
     [[nodiscard]] bool killClient(xcb_window_t windowId);
 
     // Window inspection methods
@@ -104,6 +106,7 @@ private:
     xcb_atom_t m_net_wm_desktop = XCB_NONE;
     xcb_atom_t m_net_moveresize_window = XCB_NONE;
     xcb_atom_t m_net_close_window = XCB_NONE;
+    xcb_atom_t m_net_wm_icon = XCB_NONE;
 
     // Cached keycodes for global navigation hotkeys (Left/Right & A/S)
     xcb_keycode_t m_leftKeycode = 0;

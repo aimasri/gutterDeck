@@ -7,6 +7,7 @@
 #include "../presentation/OverlayWindow.h"
 #include "../presentation/CurtainWidget.h"
 #include "../presentation/GutterWidget.h"
+#include "../presentation/AppIcon.h"
 #include "../presentation/SleekDialogs.h"
 
 #include <QAction>
@@ -642,6 +643,9 @@ void DeckController::onWindowMapped(uint32_t wid, uint32_t pid, const QString& t
         if (pid > 0) {
             m_decks[matchedIndex].pid = pid;
         }
+
+        QImage appIcon = AppIcon::createAppIcon().pixmap(64, 64).toImage();
+        static_cast<void>(m_xcbEngine.overrideWindowIconAndClass(wid, QString("gutterdeck"), appIcon));
 
         static_cast<void>(m_xcbEngine.purgeMaximizedState(wid));
         static_cast<void>(m_xcbEngine.setSkipTaskbar(wid, true));
