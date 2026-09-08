@@ -370,6 +370,16 @@ Right-clicking any gutter tab opens an Openbox-styled dark context menu:
 
 ---
 
+### Vertical & Horizontal Split-Pull View
+
+gutterDeck supports powerful native split-screen functionality that allows you to interact with two applications simultaneously without breaking the spatial accordion metaphor:
+- **Activation:** Simply `Shift + Click` on an adjacent gutter tab.
+- **Vertical Split (Side-by-Side):** The target display is instantly divided in half vertically (e.g., two `540x1920` windows on a portrait monitor). Both applications remain fully interactive, natively mapped to the X11 server, and receive hardware acceleration.
+- **Horizontal Split (Top/Bottom):** Alternatively, split horizontally to stack decks.
+- **Instant Exit:** Normal left-clicking on any gutter tab immediately terminates the split view, sweeping the unselected application away and restoring the active deck to full-screen prominence.
+
+---
+
 ### Procedural Barcode System Tray Icon
 
 gutterDeck features a custom-designed, multi-colored **barcode-style application icon**:
@@ -594,13 +604,6 @@ The following enhancements are planned for upcoming releases:
   - Hovering over an inactive gutter tab for a configurable delay (e.g. 1.0s) triggers a non-destructive temporary preview layer of that deck.
   - Moving the cursor away immediately restores the active deck without triggering a full two-phase curtain transition.
   - Clicking while peeking immediately promotes the peeked deck to active.
-- [ ] **Vertical Split-Pull View (50/50 Side-by-Side):**
-  - Triggered by `Shift + Click` on an adjacent gutter tab.
-  - Divides the target display in half (e.g., two 540×1920 windows on a 1080×1920 portrait screen).
-  - Both applications remain fully interactive and mapped to X11.
-  - Clicking any tab normally exits split mode and restores fullscreen focus.
-- [ ] **Horizontal Split View (Top / Bottom):**
-  - Stacks two decks vertically (e.g. two 1080×960 windows on a 1080×1920 display) for dual-application monitoring.
 - [ ] **Drag-to-Reorder Tabs:**
   - Interactive click-and-drag physics on gutter tabs to visually reorder deck hierarchy with smooth animations, automatically persisting changes to `config.json`.
 - [ ] **First-Launch Onboarding Tour:**
