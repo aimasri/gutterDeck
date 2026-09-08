@@ -1,5 +1,6 @@
 #include "TrayDaemonWindow.h"
 #include "AppIcon.h"
+#include "SleekDialogs.h"
 #include "../infrastructure/ConfigManager.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -92,7 +93,7 @@ void TrayDaemonWindow::sendCommandToProfile(const QString& profileId, const QStr
 }
 
 void TrayDaemonWindow::rebuildMenu() {
-    auto* menu = new QMenu();
+    auto* menu = new SleekContextMenu();
     
     auto profiles = ConfigManager::listProfiles();
     for (const auto& p : profiles) {
@@ -109,50 +110,54 @@ void TrayDaemonWindow::rebuildMenu() {
     }
     
     menu->addSeparator();
-    auto* quitAction = menu->addAction("✕ Quit Tray Daemon");
+    auto* quitAction = menu->addAction(getSleekMenuIcon(SleekMenuIcon::CloseApp), "Quit Tray Daemon");
     connect(quitAction, &QAction::triggered, qApp, &QCoreApplication::quit);
     
     m_trayIcon->setContextMenu(menu);
 }
 
 QMenu* TrayDaemonWindow::createActiveProfileMenu(const QString& profileId, const QString& profileName) {
-    auto* m = new QMenu(profileName);
+    auto* m = new SleekContextMenu();
+    m->setTitle(profileName);
     
     ConfigManager cm(profileId);
     cm.loadConfig();
     const auto& decks = cm.getDecks();
     
     for (int i = 0; i < decks.size(); ++i) {
-        auto* dm = new QMenu(decks[i].name, m);
-        auto* editName = dm->addAction("✎ Edit Deck Name...");
+        auto* dm = new SleekContextMenu(m);
+        dm->setTitle(decks[i].name);
+        
+        auto* editName = dm->addAction(getSleekMenuIcon(SleekMenuIcon::EditName), "Edit Name...");
         connect(editName, &QAction::triggered, [this, profileId, i]() { sendCommandToProfile(profileId, QString("CMD:EDIT_NAME:%1").arg(i)); });
         
-        auto* editCmd = dm->addAction("⚙ Edit Launch Command...");
+        auto* editCmd = dm->addAction(getSleekMenuIcon(SleekMenuIcon::EditCommand), "Edit Command...");
         connect(editCmd, &QAction::triggered, [this, profileId, i]() { sendCommandToProfile(profileId, QString("CMD:EDIT_CMD:%1").arg(i)); });
         
-        auto* changeCol = dm->addAction("🎨 Change Color...");
+        auto* changeCol = dm->addAction(getSleekMenuIcon(SleekMenuIcon::ChangeColor), "Change Color & Opacity...");
         connect(changeCol, &QAction::triggered, [this, profileId, i]() { sendCommandToProfile(profileId, QString("CMD:CHANGE_COLOR:%1").arg(i)); });
         
         dm->addSeparator();
-        auto* addDeck = dm->addAction("➕ Add New Deck...");
+        auto* addDeck = dm->addAction(getSleekMenuIcon(SleekMenuIcon::AddDeck), "Add New Deck...");
         connect(addDeck, &QAction::triggered, [this, profileId, i]() { sendCommandToProfile(profileId, QString("CMD:ADD_DECK:%1").arg(i)); });
         
         dm->addSeparator();
-        auto* delDeck = dm->addAction("🗑 Delete Deck");
+        auto* delDeck = dm->addAction(getSleekMenuIcon(SleekMenuIcon::DeleteDeck), "Delete Deck");
         connect(delDeck, &QAction::triggered, [this, profileId, i]() { sendCommandToProfile(profileId, QString("CMD:DELETE:%1").arg(i)); });
         
         m->addMenu(dm);
     }
     
     m->addSeparator();
-    auto* closeAction = m->addAction("✕ Close Profile");
+    auto* closeAction = m->addAction(getSleekMenuIcon(SleekMenuIcon::CloseApp), "Close Profile");
     connect(closeAction, &QAction::triggered, [this, profileId]() { sendCommandToProfile(profileId, "CMD:CLOSE_APP"); });
     
     return m;
 }
 
 QMenu* TrayDaemonWindow::createInactiveProfileMenu(const QString& profileId, const QString& profileName) {
-    auto* m = new QMenu(profileName);
+    auto* m = new SleekContextMenu();
+    m->setTitle(profileName);
     
     auto screens = QGuiApplication::screens();
     for (int i = 0; i < screens.size(); ++i) {
