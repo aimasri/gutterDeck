@@ -71,6 +71,11 @@ void TrayDaemonWindow::onClientDisconnected() {
             m_lastActiveProfileId = m_activeClients.isEmpty() ? QString() : m_activeClients.keys().first();
         }
         rebuildMenu();
+        
+        if (m_activeClients.isEmpty()) {
+            qDebug() << "No active clients remaining. Shutting down Tray Daemon.";
+            qApp->quit();
+        }
     }
     client->deleteLater();
 }
