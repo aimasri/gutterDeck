@@ -38,8 +38,9 @@ Rather than managing chaotic floating windows, alt-tabbing through dozens of ope
    - [Openbox-Styled Dark Management Dialogs](#openbox-styled-dark-management-dialogs)
    - [Procedural Barcode System Tray Icon](#procedural-barcode-system-tray-icon)
    - [Multi-Monitor & Portrait Geometry Targeting](#multi-monitor--portrait-geometry-targeting)
+   - [Chrome-Style Multi-Profile Picker & CLI](#chrome-style-multi-profile-picker--cli)
 5. [Real-World Use Cases & Workflows](#5-real-world-use-cases--workflows)
-6. [Configuration Reference (`config.json`)](#6-configuration-reference-configjson)
+6. [Configuration Reference (`config.json` & Profiles)](#6-configuration-reference-configjson--profiles)
 7. [Installation, Compilation & Testing](#7-installation-compilation--testing)
    - [Prerequisites (Debian / Ubuntu / Crunchbang++)](#prerequisites-debian--ubuntu--crunchbang)
    - [Building the Project](#building-the-project)
@@ -391,6 +392,20 @@ gutterDeck provides native configuration support for multi-monitor setups and de
 
 ---
 
+### Chrome-Style Multi-Profile Picker & CLI
+
+gutterDeck supports completely isolated configuration profiles. This allows you to create completely separate groupings of decks (e.g., a "Work" profile, a "Gaming" profile, and a "Casual" profile), each with their own decks, names, commands, and colors.
+
+- **Profile Picker Screen:** On launch, if no default is specified, you are greeted with a sleek, dark-mode profile selection screen (inspired by Chrome's profile picker). It features profile cards with colored avatars and miniature "deck color bar" previews of the decks inside them.
+- **Smart Centering:** The profile picker auto-detects the screen your mouse cursor is currently on and centers itself there, ensuring a seamless multi-monitor experience.
+- **Auto-Launch:** You can check "Always use selected profile on startup" to bypass the picker in the future.
+- **CLI Integration:** You can integrate gutterDeck into your custom launcher scripts or keyboard shortcuts using the new CLI flags:
+  - `gutterdeck --profile work` : Instantly launch the "work" profile, bypassing the picker.
+  - `gutterdeck --list-profiles` : Print a list of available profiles to stdout.
+  - `gutterdeck --reset-auto-launch` : Clear your auto-launch preference and force the picker to show.
+
+---
+
 ## 5. Real-World Use Cases & Workflows
 
 ### 1. Multi-Profile Web Development
@@ -412,11 +427,26 @@ Switch between your editor, terminal, and browser in 250ms with a single flick o
 ### 3. Vertical / Portrait Secondary Monitor
 Place gutterDeck on a dedicated vertical 1080×1920 portrait monitor. With thin 4px edge gutters, reading documentation, continuous log outputs, and mobile responsive designs takes full advantage of vertical real estate without any window titlebars or taskbar bloat.
 
+### 4. Full-Context Environment Switching (The Multi-Profile System)
+Instead of cramming all your tools into one giant dock, use the **Profile Picker** to group contexts:
+- Create a **"Work"** profile containing your company email, Slack, Jira, and internal dev tools.
+- Create a **"Gaming"** profile containing Discord, Spotify, Steam, and OBS Studio.
+- Trigger `gutterdeck --profile work` from a keybind at 9 AM, and `gutterdeck --profile gaming` at 5 PM.
+
 ---
 
-## 6. Configuration Reference (`config.json`)
+## 6. Configuration Reference (`config.json` & Profiles)
 
-Configuration is stored at `~/.config/gutter-deck/config.json`. If missing, it is created automatically with sane defaults:
+With the introduction of the multi-profile system, configurations are completely isolated by profile.
+
+- **Profile Registry:** `~/.config/gutter-deck/profiles.json` (Stores profile names, colors, and auto-launch preference).
+- **Profile Decks:** `~/.config/gutter-deck/profiles/<profile-id>/config.json` (Stores the actual decks and settings for that profile).
+
+If you are upgrading from an older version, your existing `~/.config/gutter-deck/config.json` will be automatically and safely migrated into a new `Default` profile on first launch.
+
+### `config.json` Schema
+
+Each profile's `config.json` uses the following schema:
 
 ```json
 {
