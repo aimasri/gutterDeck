@@ -139,7 +139,7 @@ QMenu* TrayDaemonWindow::createActiveProfileMenu(const QString& profileId, const
         auto* editCmd = dm->addAction(getSleekMenuIcon(SleekMenuIcon::EditCommand), "Edit Command...");
         connect(editCmd, &QAction::triggered, [this, profileId, i]() { sendCommandToProfile(profileId, QString("CMD:EDIT_CMD:%1").arg(i)); });
         
-        auto* changeCol = dm->addAction(getSleekMenuIcon(SleekMenuIcon::ChangeColor), "Change Color & Opacity...");
+        auto* changeCol = dm->addAction(getSleekMenuIcon(SleekMenuIcon::ChangeColor), "Change Color && Opacity...");
         connect(changeCol, &QAction::triggered, [this, profileId, i]() { sendCommandToProfile(profileId, QString("CMD:CHANGE_COLOR:%1").arg(i)); });
         
         dm->addSeparator();
