@@ -64,6 +64,9 @@ void OverlayWindow::setupLayout(const QRect& screenGeometry) {
 
 void OverlayWindow::rebuildAccordionLayout(int activeIndex) {
     m_currentActiveIndex = activeIndex;
+    m_isSplitMode = false;
+    m_splitLeftIndex = -1;
+    m_splitRightIndex = -1;
 
     if (!m_mainLayout) {
         return;
@@ -130,6 +133,62 @@ void OverlayWindow::setActiveGutter(int activeIndex) {
     rebuildAccordionLayout(activeIndex);
 }
 
+void OverlayWindow::enterSplitLayout(int leftDeckIndex, int rightDeckIndex, SplitOrientation orientation) {
+    m_isSplitMode = true;
+    m_splitLeftIndex = leftDeckIndex;
+    m_splitRightIndex = rightDeckIndex;
+    m_splitOrientation = orientation;
+    m_currentActiveIndex = leftDeckIndex;
+
+    if (!m_mainLayout) {
+        return;
+    }
+
+    QLayoutItem* item = nullptr;
+    while ((item = m_mainLayout->takeAt(0)) != nullptr) {
+        delete item;
+    }
+
+    int total = m_gutters.size();
+    if (total == 0) {
+        return;
+    }
+
+    // 1. Left-side gutters (0..leftDeckIndex)
+    for (int i = 0; i <= leftDeckIndex && i < total; ++i) {
+        m_gutters[i]->setLeftSide(true);
+        m_mainLayout->addWidget(m_gutters[i]);
+    }
+
+    // 2. Center stretch spacer where active split application windows are displayed
+    m_mainLayout->addStretch(1);
+
+    // 3. Right-side gutters (rightDeckIndex..total-1)
+    for (int i = rightDeckIndex; i < total; ++i) {
+        m_gutters[i]->setLeftSide(false);
+        m_mainLayout->addWidget(m_gutters[i]);
+    }
+
+    // 4. Update visual indicators: both decks in the split are marked active
+    for (int i = 0; i < total; ++i) {
+        m_gutters[i]->setActive(i == leftDeckIndex || i == rightDeckIndex);
+    }
+
+    m_mainLayout->activate();
+    updateMask(m_lastState);
+}
+
+void OverlayWindow::exitSplitLayout(int activeIndex) {
+    m_isSplitMode = false;
+    m_splitLeftIndex = -1;
+    m_splitRightIndex = -1;
+    rebuildAccordionLayout(activeIndex);
+}
+
+bool OverlayWindow::isSplitMode() const noexcept {
+    return m_isSplitMode;
+}
+
 void OverlayWindow::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
     updateMask(m_lastState);
@@ -161,11 +220,12 @@ void OverlayWindow::onGutterHoverEntered(int index) {
         return;
     }
 
-    // Determine side: Left side is 0..m_currentActiveIndex, Right side is m_currentActiveIndex+1..total-1
-    bool isLeftSide = (index <= m_currentActiveIndex);
+    // Determine side: in split mode, left side is 0..m_splitLeftIndex; otherwise 0..m_currentActiveIndex
+    bool isLeftSide = m_isSplitMode ? (index <= m_splitLeftIndex) : (index <= m_currentActiveIndex);
 
     for (int i = 0; i < total; ++i) {
-        bool sameSide = ((i <= m_currentActiveIndex) == isLeftSide);
+        bool sameSide = m_isSplitMode ? ((i <= m_splitLeftIndex) == isLeftSide)
+                                      : ((i <= m_currentActiveIndex) == isLeftSide);
         if (sameSide) {
             if (i == index) {
                 m_gutters[i]->setSwellStage(SwellStage::Expanded);
@@ -206,6 +266,8 @@ void OverlayWindow::wireGutter(GutterWidget* gutter) {
             this, &OverlayWindow::onGutterHoverLeft);
     connect(gutter, &GutterWidget::clicked,
             this, &OverlayWindow::gutterClicked);
+    connect(gutter, &GutterWidget::splitRequested,
+            this, &OverlayWindow::splitRequested);
     connect(gutter, &GutterWidget::previousRequested,
             this, &OverlayWindow::previousRequested);
     connect(gutter, &GutterWidget::nextRequested,

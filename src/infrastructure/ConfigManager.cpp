@@ -6,23 +6,280 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
+#include <QRegularExpression>
 #include <algorithm>
 
-ConfigManager::ConfigManager(const QString& customConfigPath)
-    : m_customConfigPath(customConfigPath) {}
+QString ConfigManager::getProfilesRegistryPath() {
+    return QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/gutter-deck/profiles.json";
+}
+
+QString ConfigManager::getProfileConfigPath(const QString& profileId) {
+    return QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/gutter-deck/profiles/" + profileId + "/config.json";
+}
+
+bool ConfigManager::profileExists(const QString& profileId) {
+    auto profiles = listProfiles();
+    for (const auto& p : profiles) {
+        if (p.id == profileId) return true;
+    }
+    return false;
+}
+
+QVector<ProfileInfo> ConfigManager::listProfiles() {
+    QVector<ProfileInfo> profiles;
+    QFile file(getProfilesRegistryPath());
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        if (doc.isObject() && doc.object().contains("profiles")) {
+            QJsonArray arr = doc.object()["profiles"].toArray();
+            for (const auto& val : arr) {
+                QJsonObject obj = val.toObject();
+                ProfileInfo info;
+                info.id = obj["id"].toString();
+                info.displayName = obj["displayName"].toString();
+                info.accentColor = QColor(obj["accentColor"].toString("#802563eb"));
+                profiles.append(info);
+            }
+        }
+    }
+    return profiles;
+}
+
+QString ConfigManager::getAutoLaunchProfile() {
+    QFile file(getProfilesRegistryPath());
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        if (doc.isObject()) {
+            return doc.object()["auto_launch"].toString();
+        }
+    }
+    return QString();
+}
+
+void ConfigManager::setAutoLaunchProfile(const QString& profileId) {
+    QFile file(getProfilesRegistryPath());
+    QJsonObject root;
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        root = QJsonDocument::fromJson(file.readAll()).object();
+        file.close();
+    }
+    if (profileId.isEmpty()) {
+        root.remove("auto_launch");
+    } else {
+        root["auto_launch"] = profileId;
+    }
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    }
+}
+
+bool ConfigManager::createProfile(const QString& displayName, const QColor& accentColor) {
+    QString id = displayName.toLower().replace(QRegularExpression("[^a-z0-9]+"), "-");
+    id = id.trimmed();
+    if (id.endsWith("-")) id.chop(1);
+    if (id.startsWith("-")) id.remove(0, 1);
+    if (id.isEmpty()) id = "profile";
+
+    QString originalId = id;
+    int counter = 1;
+    while (profileExists(id)) {
+        id = QString("%1-%2").arg(originalId).arg(counter++);
+    }
+
+    auto profiles = listProfiles();
+    ProfileInfo info{id, displayName, accentColor};
+    profiles.append(info);
+
+    QJsonObject root;
+    QFile file(getProfilesRegistryPath());
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        root = QJsonDocument::fromJson(file.readAll()).object();
+        file.close();
+    }
+
+    QJsonArray arr;
+    for (const auto& p : profiles) {
+        QJsonObject obj;
+        obj["id"] = p.id;
+        obj["displayName"] = p.displayName;
+        obj["accentColor"] = p.accentColor.name(QColor::HexArgb);
+        arr.append(obj);
+    }
+    root["profiles"] = arr;
+
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+        file.close();
+        
+        // Ensure directory exists and create a default config.json
+        ConfigManager newConfig(id);
+        (void)newConfig.loadConfig(); // will generate defaults and save
+        return true;
+    }
+    return false;
+}
+
+bool ConfigManager::deleteProfile(const QString& profileId) {
+    auto profiles = listProfiles();
+    if (profiles.size() <= 1) return false; // Don't delete last profile
+
+    bool found = false;
+    QJsonArray arr;
+    for (const auto& p : profiles) {
+        if (p.id == profileId) {
+            found = true;
+        } else {
+            QJsonObject obj;
+            obj["id"] = p.id;
+            obj["displayName"] = p.displayName;
+            obj["accentColor"] = p.accentColor.name(QColor::HexArgb);
+            arr.append(obj);
+        }
+    }
+
+    if (!found) return false;
+
+    QJsonObject root;
+    QFile file(getProfilesRegistryPath());
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        root = QJsonDocument::fromJson(file.readAll()).object();
+        file.close();
+    }
+    root["profiles"] = arr;
+    if (root["auto_launch"].toString() == profileId) {
+        root.remove("auto_launch");
+    }
+
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+        file.close();
+
+        // Delete profile directory
+        QString dirPath = QFileInfo(getProfileConfigPath(profileId)).dir().absolutePath();
+        QDir(dirPath).removeRecursively();
+        return true;
+    }
+    return false;
+}
+
+bool ConfigManager::renameProfile(const QString& profileId, const QString& newDisplayName) {
+    auto profiles = listProfiles();
+    bool found = false;
+    QJsonArray arr;
+    for (auto& p : profiles) {
+        if (p.id == profileId) {
+            p.displayName = newDisplayName;
+            found = true;
+        }
+        QJsonObject obj;
+        obj["id"] = p.id;
+        obj["displayName"] = p.displayName;
+        obj["accentColor"] = p.accentColor.name(QColor::HexArgb);
+        arr.append(obj);
+    }
+
+    if (!found) return false;
+
+    QJsonObject root;
+    QFile file(getProfilesRegistryPath());
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        root = QJsonDocument::fromJson(file.readAll()).object();
+        file.close();
+    }
+    root["profiles"] = arr;
+
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+        return true;
+    }
+    return false;
+}
+
+bool ConfigManager::updateProfileColor(const QString& profileId, const QColor& newColor) {
+    auto profiles = listProfiles();
+    bool found = false;
+    QJsonArray arr;
+    for (auto& p : profiles) {
+        if (p.id == profileId) {
+            p.accentColor = newColor;
+            found = true;
+        }
+        QJsonObject obj;
+        obj["id"] = p.id;
+        obj["displayName"] = p.displayName;
+        obj["accentColor"] = p.accentColor.name(QColor::HexArgb);
+        arr.append(obj);
+    }
+
+    if (!found) return false;
+
+    QJsonObject root;
+    QFile file(getProfilesRegistryPath());
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        root = QJsonDocument::fromJson(file.readAll()).object();
+        file.close();
+    }
+    root["profiles"] = arr;
+
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+        return true;
+    }
+    return false;
+}
+
+void ConfigManager::migrateIfNeeded() {
+    QFile registryFile(getProfilesRegistryPath());
+    if (registryFile.exists()) {
+        return; // Already migrated or created
+    }
+
+    QString oldConfigPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/gutter-deck/config.json";
+    QFile oldConfigFile(oldConfigPath);
+
+    QDir().mkpath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/gutter-deck/profiles/default");
+
+    if (oldConfigFile.exists()) {
+        QString newConfigPath = getProfileConfigPath("default");
+        oldConfigFile.copy(newConfigPath);
+        oldConfigFile.rename(oldConfigPath + ".backup");
+    }
+
+    QJsonObject defaultProf;
+    defaultProf["id"] = "default";
+    defaultProf["displayName"] = "Default";
+    defaultProf["accentColor"] = "#802563eb";
+    
+    QJsonArray arr;
+    arr.append(defaultProf);
+    
+    QJsonObject root;
+    root["profiles"] = arr;
+    
+    if (registryFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        registryFile.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    }
+}
+
+ConfigManager::ConfigManager(const QString& profileIdOrPath) {
+    if (!profileIdOrPath.isEmpty()) {
+        if (profileIdOrPath.contains('/') || profileIdOrPath.endsWith(".json", Qt::CaseInsensitive)) {
+            m_customConfigPath = profileIdOrPath;
+        } else {
+            m_customConfigPath = getProfileConfigPath(profileIdOrPath);
+        }
+    } else {
+        // Fallback for tests or single-instance
+        m_customConfigPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/gutter-deck/config.json";
+    }
+}
 
 QString ConfigManager::getConfigDirPath() const {
-    if (!m_customConfigPath.isEmpty()) {
-        return QFileInfo(m_customConfigPath).dir().absolutePath();
-    }
-    return QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/gutter-deck";
+    return QFileInfo(m_customConfigPath).dir().absolutePath();
 }
 
 QString ConfigManager::getConfigFilePath() const {
-    if (!m_customConfigPath.isEmpty()) {
-        return m_customConfigPath;
-    }
-    return getConfigDirPath() + "/config.json";
+    return m_customConfigPath;
 }
 
 void ConfigManager::populateDefaultDecks() {

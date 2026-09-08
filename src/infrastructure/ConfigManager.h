@@ -37,14 +37,35 @@ struct AppSettings {
 };
 
 /**
+ * @brief Metadata for a gutterDeck profile.
+ */
+struct ProfileInfo {
+    QString id;
+    QString displayName;
+    QColor accentColor;
+};
+
+/**
  * @brief Manages JSON configuration loading, serialization, and validation.
- * @details Reads and writes ~/.config/gutter-deck/config.json. Guarantees safe
+ * @details Reads and writes ~/.config/gutter-deck/profiles/<id>/config.json. Guarantees safe
  *          fallbacks, sane boundaries via validate(), and explicit persistence.
  * @note Decks are arbitrary executable commands chosen by the user.
  */
 class ConfigManager {
 public:
-    explicit ConfigManager(const QString& customConfigPath = QString());
+    static QVector<ProfileInfo> listProfiles();
+    static bool createProfile(const QString& displayName, const QColor& accentColor);
+    static bool deleteProfile(const QString& profileId);
+    static bool renameProfile(const QString& profileId, const QString& newDisplayName);
+    static bool updateProfileColor(const QString& profileId, const QColor& newColor);
+    static QString getProfileConfigPath(const QString& profileId);
+    static bool profileExists(const QString& profileId);
+    static void migrateIfNeeded();
+    static QString getProfilesRegistryPath();
+    static QString getAutoLaunchProfile();
+    static void setAutoLaunchProfile(const QString& profileId);
+
+    explicit ConfigManager(const QString& profileIdOrCustomPath = QString());
     ~ConfigManager() = default;
 
     ConfigManager(const ConfigManager&) = delete;

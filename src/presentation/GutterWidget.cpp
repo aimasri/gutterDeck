@@ -161,7 +161,13 @@ void GutterWidget::mousePressEvent(QMouseEvent* event) {
     }
 
     if (event->button() == Qt::LeftButton) {
-        emit clicked(m_index);
+        if (event->modifiers().testFlag(Qt::ShiftModifier)) {
+            emit splitRequested(m_index, SplitOrientation::Vertical);
+        } else if (event->modifiers().testFlag(Qt::ControlModifier)) {
+            emit splitRequested(m_index, SplitOrientation::Horizontal);
+        } else {
+            emit clicked(m_index);
+        }
     } else if (event->button() == Qt::RightButton) {
         emit contextMenuRequested(m_index, event->globalPosition().toPoint());
     } else if (event->button() == Qt::BackButton) {
@@ -211,7 +217,13 @@ void GutterWidget::wheelEvent(QWheelEvent* event) {
 void GutterWidget::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter ||
         event->key() == Qt::Key_Space) {
-        emit clicked(m_index);
+        if (event->modifiers().testFlag(Qt::ShiftModifier)) {
+            emit splitRequested(m_index, SplitOrientation::Vertical);
+        } else if (event->modifiers().testFlag(Qt::ControlModifier)) {
+            emit splitRequested(m_index, SplitOrientation::Horizontal);
+        } else {
+            emit clicked(m_index);
+        }
     } else if (event->key() == Qt::Key_Left || event->key() == Qt::Key_A) {
         emit previousRequested();
     } else if (event->key() == Qt::Key_Right || event->key() == Qt::Key_S) {

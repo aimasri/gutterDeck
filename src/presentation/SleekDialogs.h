@@ -30,7 +30,10 @@ enum class SleekMenuIcon {
     AddDeck,
     ReorderDecks,
     DeleteDeck,
-    CloseApp
+    CloseApp,
+    SplitVertical,
+    SplitHorizontal,
+    ExitSplit
 };
 
 [[nodiscard]] QIcon getSleekMenuIcon(SleekMenuIcon type);

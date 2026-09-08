@@ -435,6 +435,39 @@ bool XcbEngine::ungrabAltLeftRightKeys() {
     return true;
 }
 
+namespace {
+constexpr uint16_t CTRL_SHIFT_MOD_MASKS[] = {
+    XCB_MOD_MASK_CONTROL | XCB_MOD_MASK_SHIFT,
+    XCB_MOD_MASK_CONTROL | XCB_MOD_MASK_SHIFT | XCB_MOD_MASK_2,
+    XCB_MOD_MASK_CONTROL | XCB_MOD_MASK_SHIFT | XCB_MOD_MASK_LOCK,
+    XCB_MOD_MASK_CONTROL | XCB_MOD_MASK_SHIFT | XCB_MOD_MASK_2 | XCB_MOD_MASK_LOCK
+};
+}
+
+bool XcbEngine::grabCtrlShiftScroll() {
+    if (!m_xcbConn) return false;
+    for (uint16_t mask : CTRL_SHIFT_MOD_MASKS) {
+        xcb_grab_button(m_xcbConn, 0, m_root, XCB_EVENT_MASK_BUTTON_PRESS,
+                        XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC,
+                        XCB_WINDOW_NONE, XCB_CURSOR_NONE, 4, mask);
+        xcb_grab_button(m_xcbConn, 0, m_root, XCB_EVENT_MASK_BUTTON_PRESS,
+                        XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC,
+                        XCB_WINDOW_NONE, XCB_CURSOR_NONE, 5, mask);
+    }
+    m_conn.flush();
+    return true;
+}
+
+bool XcbEngine::ungrabCtrlShiftScroll() {
+    if (!m_xcbConn) return false;
+    for (uint16_t mask : CTRL_SHIFT_MOD_MASKS) {
+        xcb_ungrab_button(m_xcbConn, 4, m_root, mask);
+        xcb_ungrab_button(m_xcbConn, 5, m_root, mask);
+    }
+    m_conn.flush();
+    return true;
+}
+
 xcb_keycode_t XcbEngine::leftKeycode() const noexcept {
     return m_leftKeycode;
 }

@@ -29,3 +29,12 @@ add_executable(test_sleek_dialogs
 target_include_directories(test_sleek_dialogs PRIVATE ../src)
 target_link_libraries(test_sleek_dialogs PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
 add_test(NAME TestSleekDialogs COMMAND test_sleek_dialogs)
+
+# Test Profile Manager
+add_executable(test_profile_manager
+    test_profile_manager.cpp
+    ../src/infrastructure/ConfigManager.cpp
+)
+target_include_directories(test_profile_manager PRIVATE ../src)
+target_link_libraries(test_profile_manager PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+add_test(NAME TestProfileManager COMMAND test_profile_manager)

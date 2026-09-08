@@ -11,6 +11,12 @@ enum class SwellStage {
     Expanded
 };
 
+enum class SplitOrientation {
+    Vertical,   ///< 50/50 left and right side-by-side split
+    Horizontal  ///< 50/50 top and bottom stacked split
+};
+Q_DECLARE_METATYPE(SplitOrientation)
+
 /**
  * @brief Interactive edge tab widget that swells on mouse hover.
  * @details Composited directly inside the OverlayWindow transparent canvas.
@@ -71,6 +77,13 @@ signals:
      * @param index Zero-based index of this deck.
      */
     void clicked(int index);
+
+    /**
+     * @brief Emitted when the user requests a split view with this gutter via Shift+Click (Vertical) or Ctrl+Click (Horizontal).
+     * @param index Zero-based index of this deck.
+     * @param orientation 50/50 vertical or horizontal split.
+     */
+    void splitRequested(int index, SplitOrientation orientation);
 
     /**
      * @brief Emitted when the user requests a context menu via right click.

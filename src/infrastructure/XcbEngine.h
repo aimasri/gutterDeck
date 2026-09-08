@@ -68,6 +68,8 @@ public:
     // Global key grabbing methods
     [[nodiscard]] bool grabAltLeftRightKeys();
     [[nodiscard]] bool ungrabAltLeftRightKeys();
+    [[nodiscard]] bool grabCtrlShiftScroll();
+    [[nodiscard]] bool ungrabCtrlShiftScroll();
     [[nodiscard]] xcb_keycode_t leftKeycode() const noexcept;
     [[nodiscard]] xcb_keycode_t rightKeycode() const noexcept;
     [[nodiscard]] bool isPreviousKey(xcb_keycode_t detail) const noexcept;

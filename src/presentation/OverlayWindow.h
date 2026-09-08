@@ -7,7 +7,7 @@
 #include <QWidget>
 
 class ConfigManager;
-class GutterWidget;
+#include "GutterWidget.h"
 class CurtainWidget;
 enum class AppState;
 
@@ -72,8 +72,28 @@ public:
      */
     void updateGutterVisuals(int index, const QString& name, const QColor& color);
 
+    /**
+     * @brief Rebuilds accordion layout for split view with two active deck tabs.
+     * @param leftDeckIndex Index of left/top deck in split.
+     * @param rightDeckIndex Index of right/bottom deck in split.
+     * @param orientation Vertical or Horizontal split.
+     */
+    void enterSplitLayout(int leftDeckIndex, int rightDeckIndex, SplitOrientation orientation);
+
+    /**
+     * @brief Restores normal single-active-deck accordion layout.
+     * @param activeIndex Index of newly focused deck.
+     */
+    void exitSplitLayout(int activeIndex);
+
+    /**
+     * @brief Queries whether the overlay is currently in split layout mode.
+     */
+    [[nodiscard]] bool isSplitMode() const noexcept;
+
 signals:
     void gutterClicked(int index);
+    void splitRequested(int index, SplitOrientation orientation);
     void previousRequested();
     void nextRequested();
     void contextMenuRequested(int index, const QPoint& globalPos);
@@ -96,6 +116,10 @@ private:
     QVector<GutterWidget*> m_gutters;
     AppState m_lastState;
     int m_currentActiveIndex = 0;
+    bool m_isSplitMode = false;
+    int m_splitLeftIndex = -1;
+    int m_splitRightIndex = -1;
+    SplitOrientation m_splitOrientation = SplitOrientation::Vertical;
     QTimer m_leaveDebounceTimer;
 
     void setupLayout(const QRect& screenGeometry);

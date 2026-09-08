@@ -6,6 +6,8 @@
 #include <QVector>
 #include <xcb/xcb.h>
 
+#include "../presentation/GutterWidget.h"
+
 class StateMachine;
 class XcbEngine;
 class WindowWatcher;
@@ -75,12 +77,55 @@ public:
      */
     [[nodiscard]] const QVector<DeckSlot>& decks() const noexcept;
 
+    /**
+     * @brief Returns true if controller is currently in 50/50 split view mode.
+     */
+    [[nodiscard]] bool isSplitMode() const noexcept;
+
+    /**
+     * @brief Gets current split orientation (Vertical or Horizontal).
+     */
+    [[nodiscard]] SplitOrientation splitOrientation() const noexcept;
+
+    /**
+     * @brief Gets the first (left or top) deck index in the active split view.
+     */
+    [[nodiscard]] int splitPrimaryIndex() const noexcept;
+
+    /**
+     * @brief Gets the second (right or bottom) deck index in the active split view.
+     */
+    [[nodiscard]] int splitSecondaryIndex() const noexcept;
+
+    /**
+     * @brief Calculates geometry for the primary (left or top) split window.
+     */
+    [[nodiscard]] QRect splitPrimaryGeometry() const;
+
+    /**
+     * @brief Calculates geometry for the secondary (right or bottom) split window.
+     */
+    [[nodiscard]] QRect splitSecondaryGeometry() const;
+
 public slots:
     /**
      * @brief Triggered when a user clicks a gutter tab.
      * @param index Zero-based index of the clicked gutter.
      */
     void onGutterClicked(int index);
+
+    /**
+     * @brief Triggered when a user requests a split view with an adjacent deck.
+     * @param index Zero-based index of the target gutter to split with.
+     * @param orientation Vertical (side-by-side) or Horizontal (top/bottom).
+     */
+    void onSplitRequested(int index, SplitOrientation orientation);
+
+    /**
+     * @brief Exits split view mode, expanding one deck to fullscreen and minimizing the other.
+     * @param focusDeckIndex Deck index to focus fullscreen (defaults to primary if -1).
+     */
+    void exitSplitMode(int focusDeckIndex = -1);
 
     /**
      * @brief Triggered when AppLauncher spawns a deck command.
@@ -127,10 +172,10 @@ public slots:
      */
     void onGutterContextMenuRequested(int index, const QPoint& globalPos);
 
-    void onEditDeckName(int index);
-    void onEditDeckCommand(int index);
-    void onChangeDeckColor(int index);
-    void onAddNewDeck(int relativeToIndex = -1);
+    void onEditDeckName(int index, const QPoint& customCenter = QPoint());
+    void onEditDeckCommand(int index, const QPoint& customCenter = QPoint());
+    void onChangeDeckColor(int index, const QPoint& customCenter = QPoint());
+    void onAddNewDeck(int relativeToIndex = -1, const QPoint& customCenter = QPoint());
     void onReorderDecks();
     void onCloseDeck(int index);
     void closeGutterDeck();
@@ -143,11 +188,17 @@ signals:
     void deckSwitched(int newActiveDeck);
 
     /**
+     * @brief Emitted when split view mode is entered or exited.
+     */
+    void splitModeChanged(bool active);
+
+    /**
      * @brief Emitted when an attached deck window is closed externally.
      */
     void deckClosed(int deckIndex);
 
 private:
+    void enterSplitMode(int firstDeck, int secondDeck, SplitOrientation orientation);
     void performSwitch(int targetDeck);
     void onCurtainPhase1Complete(int targetDeck);
     void onSwitchComplete();
@@ -162,6 +213,10 @@ private:
 
     QVector<DeckSlot> m_decks;
     int m_activeDeckIndex = -1;
+    bool m_isSplitMode = false;
+    SplitOrientation m_splitOrientation = SplitOrientation::Vertical;
+    int m_splitPrimaryIndex = -1;
+    int m_splitSecondaryIndex = -1;
     bool m_slideFromRight = true;
     uint32_t m_assignedDesktop = 0;
     int m_lastLaunchedDeckIndex = -1;

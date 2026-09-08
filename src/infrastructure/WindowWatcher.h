@@ -82,6 +82,16 @@ signals:
      */
     void nextDeckRequested();
 
+    /**
+     * @brief Emitted when global Ctrl+Shift+ScrollUp is triggered.
+     */
+    void globalScrollUp();
+
+    /**
+     * @brief Emitted when global Ctrl+Shift+ScrollDown is triggered.
+     */
+    void globalScrollDown();
+
 private slots:
     void processXcbEvents();
 

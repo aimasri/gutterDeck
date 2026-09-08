@@ -111,6 +111,7 @@ DeckController::DeckController(
 
 DeckController::~DeckController() {
     static_cast<void>(m_xcbEngine.ungrabAltLeftRightKeys());
+        static_cast<void>(m_xcbEngine.ungrabCtrlShiftScroll());
 }
 
 void DeckController::setOverlay(OverlayWindow* overlay) noexcept {
@@ -150,6 +151,10 @@ void DeckController::initialize() {
             this, [this]() { switchToPreviousDeck(false); });
     connect(&m_windowWatcher, &WindowWatcher::nextDeckRequested,
             this, [this]() { switchToNextDeck(false); });
+    QObject::connect(&m_windowWatcher, &WindowWatcher::globalScrollUp,
+                     this, [this]() { switchToPreviousDeck(false); });
+    QObject::connect(&m_windowWatcher, &WindowWatcher::globalScrollDown,
+                     this, [this]() { switchToNextDeck(false); });
 
     // Connect AppLauncher signals
     connect(&m_appLauncher, &AppLauncher::deckLaunched,
@@ -168,6 +173,7 @@ void DeckController::initialize() {
     // Grab Alt+Left / Alt+Right navigation hotkeys if currently on assigned desktop
     if (m_xcbEngine.getCurrentDesktop() == m_assignedDesktop) {
         static_cast<void>(m_xcbEngine.grabAltLeftRightKeys());
+        static_cast<void>(m_xcbEngine.grabCtrlShiftScroll());
     }
 
     // Staggered launch of user commands
@@ -186,9 +192,177 @@ const QVector<DeckSlot>& DeckController::decks() const noexcept {
     return m_decks;
 }
 
+bool DeckController::isSplitMode() const noexcept {
+    return m_isSplitMode;
+}
+
+SplitOrientation DeckController::splitOrientation() const noexcept {
+    return m_splitOrientation;
+}
+
+int DeckController::splitPrimaryIndex() const noexcept {
+    return m_splitPrimaryIndex;
+}
+
+int DeckController::splitSecondaryIndex() const noexcept {
+    return m_splitSecondaryIndex;
+}
+
+QRect DeckController::splitPrimaryGeometry() const {
+    QRect scr = targetGeometry();
+    if (m_splitOrientation == SplitOrientation::Vertical) {
+        return QRect(scr.x(), scr.y(), scr.width() / 2, scr.height());
+    } else {
+        return QRect(scr.x(), scr.y(), scr.width(), scr.height() / 2);
+    }
+}
+
+QRect DeckController::splitSecondaryGeometry() const {
+    QRect scr = targetGeometry();
+    if (m_splitOrientation == SplitOrientation::Vertical) {
+        int halfW = scr.width() / 2;
+        return QRect(scr.x() + halfW, scr.y(), scr.width() - halfW, scr.height());
+    } else {
+        int halfH = scr.height() / 2;
+        return QRect(scr.x(), scr.y() + halfH, scr.width(), scr.height() - halfH);
+    }
+}
+
+void DeckController::onSplitRequested(int index, SplitOrientation orientation) {
+    if (index < 0 || index >= m_decks.size()) {
+        return;
+    }
+    if (m_activeDeckIndex < 0 || m_activeDeckIndex >= m_decks.size()) {
+        return;
+    }
+    if (index == m_activeDeckIndex) {
+        return;
+    }
+    // Adjacency requirement: must be immediately adjacent to active deck
+    if (std::abs(index - m_activeDeckIndex) != 1) {
+        qDebug() << "Split view rejected: target deck" << index
+                 << "is not adjacent to active deck" << m_activeDeckIndex;
+        return;
+    }
+    if (!m_stateMachine.isIdle()) {
+        qDebug() << "Split view rejected: StateMachine is not IDLE.";
+        return;
+    }
+
+    xcb_window_t activeWin = m_decks[m_activeDeckIndex].windowId;
+    xcb_window_t targetWin = m_decks[index].windowId;
+    if (activeWin == XCB_WINDOW_NONE || targetWin == XCB_WINDOW_NONE) {
+        qDebug() << "Split view rejected: one or both decks do not have an attached window.";
+        return;
+    }
+
+    // Lower index is primary (left or top), higher index is secondary (right or bottom)
+    int firstDeck = std::min(m_activeDeckIndex, index);
+    int secondDeck = std::max(m_activeDeckIndex, index);
+
+    enterSplitMode(firstDeck, secondDeck, orientation);
+}
+
+void DeckController::enterSplitMode(int firstDeck, int secondDeck, SplitOrientation orientation) {
+    m_isSplitMode = true;
+    m_splitPrimaryIndex = firstDeck;
+    m_splitSecondaryIndex = secondDeck;
+    m_splitOrientation = orientation;
+
+    xcb_window_t win1 = m_decks[firstDeck].windowId;
+    xcb_window_t win2 = m_decks[secondDeck].windowId;
+
+    QRect geom1 = splitPrimaryGeometry();
+    QRect geom2 = splitSecondaryGeometry();
+
+    // 1. Position and restore both windows
+    if (win1 != XCB_WINDOW_NONE) {
+        static_cast<void>(m_xcbEngine.purgeMaximizedState(win1));
+        static_cast<void>(m_xcbEngine.restoreWindow(win1));
+        static_cast<void>(m_xcbEngine.moveResizeWindow(win1, geom1.x(), geom1.y(), geom1.width(), geom1.height()));
+    }
+
+    if (win2 != XCB_WINDOW_NONE) {
+        static_cast<void>(m_xcbEngine.purgeMaximizedState(win2));
+        static_cast<void>(m_xcbEngine.restoreWindow(win2));
+        static_cast<void>(m_xcbEngine.moveResizeWindow(win2, geom2.x(), geom2.y(), geom2.width(), geom2.height()));
+    }
+
+    // Activate both windows to bring to front
+    if (win1 != XCB_WINDOW_NONE) {
+        static_cast<void>(m_xcbEngine.activateWindow(win1));
+    }
+    if (win2 != XCB_WINDOW_NONE) {
+        static_cast<void>(m_xcbEngine.activateWindow(win2));
+    }
+
+    // 2. Update presentation overlay layout
+    if (m_overlay) {
+        m_overlay->enterSplitLayout(firstDeck, secondDeck, orientation);
+    }
+
+    emit splitModeChanged(true);
+}
+
+void DeckController::exitSplitMode(int focusDeckIndex) {
+    if (!m_isSplitMode) {
+        return;
+    }
+
+    int oldPrimary = m_splitPrimaryIndex;
+    int oldSecondary = m_splitSecondaryIndex;
+
+    m_isSplitMode = false;
+    m_splitPrimaryIndex = -1;
+    m_splitSecondaryIndex = -1;
+
+    int keepIndex = focusDeckIndex;
+    if (keepIndex < 0 || keepIndex >= m_decks.size()) {
+        keepIndex = (m_activeDeckIndex >= 0) ? m_activeDeckIndex : oldPrimary;
+    }
+
+    int minimizeIndex = (keepIndex == oldPrimary) ? oldSecondary : oldPrimary;
+
+    // Minimize unselected split window
+    if (minimizeIndex >= 0 && minimizeIndex < m_decks.size()) {
+        xcb_window_t minWin = m_decks[minimizeIndex].windowId;
+        if (minWin != XCB_WINDOW_NONE && minWin != m_decks[keepIndex].windowId) {
+            static_cast<void>(m_xcbEngine.minimizeWindow(minWin));
+        }
+    }
+
+    // Restore focused window to fullscreen
+    m_activeDeckIndex = keepIndex;
+    if (m_activeDeckIndex >= 0 && m_activeDeckIndex < m_decks.size()) {
+        xcb_window_t keepWin = m_decks[m_activeDeckIndex].windowId;
+        if (keepWin != XCB_WINDOW_NONE) {
+            QRect scr = targetGeometry();
+            static_cast<void>(m_xcbEngine.purgeMaximizedState(keepWin));
+            static_cast<void>(m_xcbEngine.restoreWindow(keepWin));
+            static_cast<void>(m_xcbEngine.moveResizeWindow(keepWin, scr.x(), scr.y(), scr.width(), scr.height()));
+            static_cast<void>(m_xcbEngine.activateWindow(keepWin));
+        }
+    }
+
+    if (m_overlay) {
+        m_overlay->exitSplitLayout(m_activeDeckIndex);
+    }
+
+    emit splitModeChanged(false);
+    emit deckSwitched(m_activeDeckIndex);
+}
+
 void DeckController::onGutterClicked(int index) {
     if (index < 0 || index >= m_decks.size()) {
         return;
+    }
+
+    if (m_isSplitMode) {
+        if (index == m_splitPrimaryIndex || index == m_splitSecondaryIndex) {
+            exitSplitMode(index);
+            return;
+        }
+        exitSplitMode(m_splitPrimaryIndex);
     }
 
     if (index == m_activeDeckIndex) {
@@ -312,7 +486,22 @@ void DeckController::onSwitchComplete() {
     static_cast<void>(m_stateMachine.tryTransition(AppState::SWITCHING_IN, AppState::IDLE));
 
     // Re-assert target geometry on completion to lock placement
-    if (m_activeDeckIndex >= 0 && m_activeDeckIndex < m_decks.size()) {
+    if (m_isSplitMode) {
+        if (m_splitPrimaryIndex >= 0 && m_splitPrimaryIndex < m_decks.size()) {
+            xcb_window_t w1 = m_decks[m_splitPrimaryIndex].windowId;
+            if (w1 != XCB_WINDOW_NONE) {
+                QRect g1 = splitPrimaryGeometry();
+                static_cast<void>(m_xcbEngine.moveResizeWindow(w1, g1.x(), g1.y(), g1.width(), g1.height()));
+            }
+        }
+        if (m_splitSecondaryIndex >= 0 && m_splitSecondaryIndex < m_decks.size()) {
+            xcb_window_t w2 = m_decks[m_splitSecondaryIndex].windowId;
+            if (w2 != XCB_WINDOW_NONE) {
+                QRect g2 = splitSecondaryGeometry();
+                static_cast<void>(m_xcbEngine.moveResizeWindow(w2, g2.x(), g2.y(), g2.width(), g2.height()));
+            }
+        }
+    } else if (m_activeDeckIndex >= 0 && m_activeDeckIndex < m_decks.size()) {
         xcb_window_t activeWin = m_decks[m_activeDeckIndex].windowId;
         if (activeWin != XCB_WINDOW_NONE) {
             QRect scr = targetGeometry();
@@ -483,6 +672,10 @@ void DeckController::onWindowDestroyed(uint32_t wid) {
             qDebug() << "Attached window for Deck [" << m_decks[i].name << "] was destroyed.";
             m_decks[i].windowId = XCB_WINDOW_NONE;
             m_decks[i].isMapped = false;
+            if (m_isSplitMode && (i == m_splitPrimaryIndex || i == m_splitSecondaryIndex)) {
+                int survivingIndex = (i == m_splitPrimaryIndex) ? m_splitSecondaryIndex : m_splitPrimaryIndex;
+                exitSplitMode(survivingIndex);
+            }
             emit deckClosed(i);
             break;
         }
@@ -499,10 +692,12 @@ void DeckController::onCurrentDesktopChanged(uint32_t currentDesktop) {
 
     if (currentDesktop == m_assignedDesktop) {
         static_cast<void>(m_xcbEngine.grabAltLeftRightKeys());
+        static_cast<void>(m_xcbEngine.grabCtrlShiftScroll());
         m_overlay->show();
         m_overlay->updateMask(m_stateMachine.currentState());
     } else {
         static_cast<void>(m_xcbEngine.ungrabAltLeftRightKeys());
+        static_cast<void>(m_xcbEngine.ungrabCtrlShiftScroll());
         m_overlay->hide();
     }
 }
@@ -512,10 +707,13 @@ void DeckController::switchToPreviousDeck(bool wrap) {
         return;
     }
     int total = m_decks.size();
-    int current = (m_activeDeckIndex >= 0) ? m_activeDeckIndex : 0;
+    int current = m_isSplitMode ? m_splitPrimaryIndex : ((m_activeDeckIndex >= 0) ? m_activeDeckIndex : 0);
     int target = current - 1;
     if (target < 0) {
         if (!wrap) {
+            if (m_isSplitMode) {
+                exitSplitMode(m_splitPrimaryIndex);
+            }
             return;
         }
         target = total - 1;
@@ -528,10 +726,13 @@ void DeckController::switchToNextDeck(bool wrap) {
         return;
     }
     int total = m_decks.size();
-    int current = (m_activeDeckIndex >= 0) ? m_activeDeckIndex : 0;
+    int current = m_isSplitMode ? m_splitSecondaryIndex : ((m_activeDeckIndex >= 0) ? m_activeDeckIndex : 0);
     int target = current + 1;
     if (target >= total) {
         if (!wrap) {
+            if (m_isSplitMode) {
+                exitSplitMode(m_splitSecondaryIndex);
+            }
             return;
         }
         target = 0;
@@ -550,6 +751,24 @@ void DeckController::onGutterContextMenuRequested(int index, const QPoint& globa
     auto* changeColorAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::ChangeColor), QStringLiteral("Change Color && Opacity..."));
     auto* addDeckAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::AddDeck), QStringLiteral("Add New Deck..."));
     auto* reorderDecksAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::ReorderDecks), QStringLiteral("Reorder Decks..."));
+
+    QAction* splitVertAct = nullptr;
+    QAction* splitHorzAct = nullptr;
+    QAction* exitSplitAct = nullptr;
+
+    if (m_isSplitMode) {
+        menu.addSeparator();
+        exitSplitAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::ExitSplit), QStringLiteral("Exit Split View"));
+    } else if (m_activeDeckIndex >= 0 && index != m_activeDeckIndex && std::abs(index - m_activeDeckIndex) == 1) {
+        if (m_decks[index].windowId != XCB_WINDOW_NONE && m_decks[m_activeDeckIndex].windowId != XCB_WINDOW_NONE) {
+            menu.addSeparator();
+            splitVertAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::SplitVertical),
+                                         QStringLiteral("Split Vertically (50/50 Side-by-Side)"));
+            splitHorzAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::SplitHorizontal),
+                                         QStringLiteral("Split Horizontally (50/50 Top/Bottom)"));
+        }
+    }
+
     menu.addSeparator();
     auto* deleteDeckAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::DeleteDeck), QStringLiteral("Delete Deck"));
 
@@ -576,6 +795,12 @@ void DeckController::onGutterContextMenuRequested(int index, const QPoint& globa
         onAddNewDeck(index);
     } else if (selected == reorderDecksAct) {
         onReorderDecks();
+    } else if (selected == splitVertAct) {
+        onSplitRequested(index, SplitOrientation::Vertical);
+    } else if (selected == splitHorzAct) {
+        onSplitRequested(index, SplitOrientation::Horizontal);
+    } else if (selected == exitSplitAct) {
+        exitSplitMode(index);
     } else if (selected == deleteDeckAct) {
         onCloseDeck(index);
     } else if (selected == quitAct) {
@@ -583,7 +808,7 @@ void DeckController::onGutterContextMenuRequested(int index, const QPoint& globa
     }
 }
 
-void DeckController::onEditDeckName(int index) {
+void DeckController::onEditDeckName(int index, const QPoint& customCenter) {
     if (index < 0 || index >= m_decks.size()) {
         return;
     }
@@ -596,7 +821,7 @@ void DeckController::onEditDeckName(int index) {
     );
     dlg.adjustSize();
     if (m_overlay) {
-        dlg.move(m_overlay->geometry().center() - dlg.rect().center());
+        QPoint center = customCenter.isNull() ? m_overlay->geometry().center() : customCenter; dlg.move(center - dlg.rect().center());
     }
 
     if (dlg.exec() == QDialog::Accepted) {
@@ -611,7 +836,7 @@ void DeckController::onEditDeckName(int index) {
     }
 }
 
-void DeckController::onEditDeckCommand(int index) {
+void DeckController::onEditDeckCommand(int index, const QPoint& customCenter) {
     if (index < 0 || index >= m_decks.size()) {
         return;
     }
@@ -624,7 +849,7 @@ void DeckController::onEditDeckCommand(int index) {
     );
     dlg.adjustSize();
     if (m_overlay) {
-        dlg.move(m_overlay->geometry().center() - dlg.rect().center());
+        QPoint center = customCenter.isNull() ? m_overlay->geometry().center() : customCenter; dlg.move(center - dlg.rect().center());
     }
 
     if (dlg.exec() == QDialog::Accepted) {
@@ -639,7 +864,7 @@ void DeckController::onEditDeckCommand(int index) {
     }
 }
 
-void DeckController::onChangeDeckColor(int index) {
+void DeckController::onChangeDeckColor(int index, const QPoint& customCenter) {
     if (index < 0 || index >= m_decks.size()) {
         return;
     }
@@ -647,7 +872,7 @@ void DeckController::onChangeDeckColor(int index) {
     SleekColorDialog dlg(m_decks[index].color, m_overlay);
     dlg.adjustSize();
     if (m_overlay) {
-        dlg.move(m_overlay->geometry().center() - dlg.rect().center());
+        QPoint center = customCenter.isNull() ? m_overlay->geometry().center() : customCenter; dlg.move(center - dlg.rect().center());
     }
 
     if (dlg.exec() == QDialog::Accepted) {
@@ -662,7 +887,7 @@ void DeckController::onChangeDeckColor(int index) {
     }
 }
 
-void DeckController::onAddNewDeck(int relativeToIndex) {
+void DeckController::onAddNewDeck(int relativeToIndex, const QPoint& customCenter) {
     QString relName;
     if (relativeToIndex >= 0 && relativeToIndex < m_decks.size()) {
         relName = m_decks[relativeToIndex].name;
@@ -671,7 +896,7 @@ void DeckController::onAddNewDeck(int relativeToIndex) {
     SleekAddDeckDialog dlg(relName, m_overlay);
     dlg.adjustSize();
     if (m_overlay) {
-        dlg.move(m_overlay->geometry().center() - dlg.rect().center());
+        QPoint center = customCenter.isNull() ? m_overlay->geometry().center() : customCenter; dlg.move(center - dlg.rect().center());
     }
 
     if (dlg.exec() == QDialog::Accepted) {
@@ -775,6 +1000,11 @@ void DeckController::onCloseDeck(int index) {
         return;
     }
 
+    if (m_isSplitMode && (index == m_splitPrimaryIndex || index == m_splitSecondaryIndex)) {
+        int survivingIndex = (index == m_splitPrimaryIndex) ? m_splitSecondaryIndex : m_splitPrimaryIndex;
+        exitSplitMode(survivingIndex);
+    }
+
     xcb_window_t winId = m_decks[index].windowId;
 
     if (winId != XCB_WINDOW_NONE) {
@@ -826,6 +1056,8 @@ void DeckController::closeGutterDeck() {
     qDebug() << "Closing Gutter Deck: gracefully closing managed deck windows...";
 
     static_cast<void>(m_xcbEngine.ungrabAltLeftRightKeys());
+        static_cast<void>(m_xcbEngine.ungrabCtrlShiftScroll());
+    static_cast<void>(m_xcbEngine.ungrabCtrlShiftScroll());
 
     // 1. Hide overlay window immediately so the desktop is instantly responsive
     if (m_overlay) {

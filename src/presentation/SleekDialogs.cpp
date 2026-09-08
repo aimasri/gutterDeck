@@ -263,6 +263,31 @@ QIcon getSleekMenuIcon(SleekMenuIcon type) {
             p.drawLine(QPointF(21, 20), QPointF(25, 16));
             break;
         }
+        case SleekMenuIcon::SplitVertical: {
+            QPen pen(QColor("#38bdf8"), 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            p.setPen(pen);
+            p.drawRoundedRect(QRectF(7, 7, 18, 18), 3, 3);
+            p.drawLine(QPointF(16, 7), QPointF(16, 25));
+            break;
+        }
+        case SleekMenuIcon::SplitHorizontal: {
+            QPen pen(QColor("#38bdf8"), 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            p.setPen(pen);
+            p.drawRoundedRect(QRectF(7, 7, 18, 18), 3, 3);
+            p.drawLine(QPointF(7, 16), QPointF(25, 16));
+            break;
+        }
+        case SleekMenuIcon::ExitSplit: {
+            QPen pen(QColor("#a1a1aa"), 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            p.setPen(pen);
+            p.drawRoundedRect(QRectF(7, 7, 18, 18), 3, 3);
+            // Inward arrow heads indicating collapse to single fullscreen
+            p.drawLine(QPointF(11, 11), QPointF(14, 14));
+            p.drawLine(QPointF(21, 11), QPointF(18, 14));
+            p.drawLine(QPointF(11, 21), QPointF(14, 18));
+            p.drawLine(QPointF(21, 21), QPointF(18, 18));
+            break;
+        }
     }
     p.end();
 

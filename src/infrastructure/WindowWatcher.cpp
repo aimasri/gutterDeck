@@ -115,6 +115,15 @@ void WindowWatcher::processXcbEvents() {
                 }
                 break;
             }
+            case XCB_BUTTON_PRESS: {
+                auto* btnEvent = reinterpret_cast<xcb_button_press_event_t*>(event.get());
+                if (btnEvent->detail == 4) {
+                    emit globalScrollUp();
+                } else if (btnEvent->detail == 5) {
+                    emit globalScrollDown();
+                }
+                break;
+            }
             default:
                 break;
         }

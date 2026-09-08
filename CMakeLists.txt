@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find Qt6
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 
 # Find XCB
 find_package(PkgConfig REQUIRED)
@@ -35,6 +35,9 @@ set(SOURCES
     src/presentation/OverlayWindow.cpp
     src/presentation/SleekDialogs.cpp
     src/presentation/AppIcon.cpp
+    src/presentation/ProfilePickerWindow.cpp
+    src/infrastructure/TrayClient.cpp
+    src/presentation/TrayDaemonWindow.cpp
 )
 
 add_executable(gutterdeck ${SOURCES})
@@ -49,7 +52,7 @@ target_include_directories(gutterdeck PRIVATE
 target_link_libraries(gutterdeck PRIVATE 
     Qt6::Core 
     Qt6::Gui 
-    Qt6::Widgets 
+    Qt6::Widgets Qt6::Network 
     ${XCB_LIBRARIES}
 )
 

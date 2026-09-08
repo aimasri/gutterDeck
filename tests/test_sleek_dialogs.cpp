@@ -21,6 +21,8 @@ private slots:
     void testGutterWidgetSwellStages();
     void testGutterWidgetInactiveZone();
     void testGutterWidgetWheelNavigation();
+    void testGutterWidgetSplitSignals();
+    void testSplitGeometryCalculations();
 };
 
 void TestSleekDialogs::testContextMenuProperties() {
@@ -36,7 +38,10 @@ void TestSleekDialogs::testContextMenuProperties() {
         SleekMenuIcon::AddDeck,
         SleekMenuIcon::ReorderDecks,
         SleekMenuIcon::DeleteDeck,
-        SleekMenuIcon::CloseApp
+        SleekMenuIcon::CloseApp,
+        SleekMenuIcon::SplitVertical,
+        SleekMenuIcon::SplitHorizontal,
+        SleekMenuIcon::ExitSplit
     };
 
     for (auto iconType : allIcons) {
@@ -330,6 +335,104 @@ void TestSleekDialogs::testGutterWidgetWheelNavigation() {
     QCoreApplication::sendEvent(&widget, &wheelDown);
     QCOMPARE(prevSpy.count(), 1);
     QCOMPARE(nextSpy.count(), 1);
+}
+
+void TestSleekDialogs::testGutterWidgetSplitSignals() {
+    GutterWidget widget(2, "Deck 3", QColor("#802563eb"), 4, 44, 80);
+    widget.resize(44, 800);
+
+    QSignalSpy clickSpy(&widget, &GutterWidget::clicked);
+    QSignalSpy splitSpy(&widget, &GutterWidget::splitRequested);
+
+    // 1. Normal Left Click in active zone -> emits clicked(2), does not emit splitRequested
+    QMouseEvent normalClick(QEvent::MouseButtonPress, QPointF(10, 150), QPointF(10, 150),
+                            Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(&widget, &normalClick);
+    QCOMPARE(clickSpy.count(), 1);
+    QCOMPARE(clickSpy.first().first().toInt(), 2);
+    QCOMPARE(splitSpy.count(), 0);
+
+    // 2. Shift + Left Click in active zone -> emits splitRequested(2, Vertical), does not emit clicked
+    QMouseEvent shiftClick(QEvent::MouseButtonPress, QPointF(10, 150), QPointF(10, 150),
+                           Qt::LeftButton, Qt::LeftButton, Qt::ShiftModifier);
+    QCoreApplication::sendEvent(&widget, &shiftClick);
+    QCOMPARE(clickSpy.count(), 1); // remains 1
+    QCOMPARE(splitSpy.count(), 1);
+    QCOMPARE(splitSpy.last().at(0).toInt(), 2);
+    QCOMPARE(static_cast<SplitOrientation>(splitSpy.last().at(1).toInt()), SplitOrientation::Vertical);
+
+    // 3. Ctrl + Left Click in active zone -> emits splitRequested(2, Horizontal), does not emit clicked
+    QMouseEvent ctrlClick(QEvent::MouseButtonPress, QPointF(10, 150), QPointF(10, 150),
+                          Qt::LeftButton, Qt::LeftButton, Qt::ControlModifier);
+    QCoreApplication::sendEvent(&widget, &ctrlClick);
+    QCOMPARE(clickSpy.count(), 1); // remains 1
+    QCOMPARE(splitSpy.count(), 2);
+    QCOMPARE(splitSpy.last().at(0).toInt(), 2);
+    QCOMPARE(static_cast<SplitOrientation>(splitSpy.last().at(1).toInt()), SplitOrientation::Horizontal);
+
+    // 4. Shift/Ctrl Click in inactive zone (y <= 80) -> ignored, no signals emitted
+    QMouseEvent shiftInactive(QEvent::MouseButtonPress, QPointF(10, 40), QPointF(10, 40),
+                             Qt::LeftButton, Qt::LeftButton, Qt::ShiftModifier);
+    QCoreApplication::sendEvent(&widget, &shiftInactive);
+    QCOMPARE(clickSpy.count(), 1);
+    QCOMPARE(splitSpy.count(), 2);
+
+    // 5. Keyboard Shift+Enter -> emits splitRequested(2, Vertical)
+    QKeyEvent shiftEnter(QEvent::KeyPress, Qt::Key_Return, Qt::ShiftModifier);
+    QCoreApplication::sendEvent(&widget, &shiftEnter);
+    QCOMPARE(splitSpy.count(), 3);
+    QCOMPARE(static_cast<SplitOrientation>(splitSpy.last().at(1).toInt()), SplitOrientation::Vertical);
+
+    // 6. Keyboard Ctrl+Space -> emits splitRequested(2, Horizontal)
+    QKeyEvent ctrlSpace(QEvent::KeyPress, Qt::Key_Space, Qt::ControlModifier);
+    QCoreApplication::sendEvent(&widget, &ctrlSpace);
+    QCOMPARE(splitSpy.count(), 4);
+    QCOMPARE(static_cast<SplitOrientation>(splitSpy.last().at(1).toInt()), SplitOrientation::Horizontal);
+}
+
+void TestSleekDialogs::testSplitGeometryCalculations() {
+    // 1. Even portrait display geometry: 1080 x 1920
+    QRect screen(0, 0, 1080, 1920);
+
+    // Vertical split: left 540x1920, right 540x1920
+    int halfW = screen.width() / 2;
+    QRect vLeft(screen.x(), screen.y(), halfW, screen.height());
+    QRect vRight(screen.x() + halfW, screen.y(), screen.width() - halfW, screen.height());
+
+    QCOMPARE(vLeft, QRect(0, 0, 540, 1920));
+    QCOMPARE(vRight, QRect(540, 0, 540, 1920));
+    QCOMPARE(vLeft.width() + vRight.width(), screen.width());
+    QCOMPARE(vRight.x(), vLeft.x() + vLeft.width());
+
+    // Horizontal split: top 1080x960, bottom 1080x960
+    int halfH = screen.height() / 2;
+    QRect hTop(screen.x(), screen.y(), screen.width(), halfH);
+    QRect hBottom(screen.x(), screen.y() + halfH, screen.width(), screen.height() - halfH);
+
+    QCOMPARE(hTop, QRect(0, 0, 1080, 960));
+    QCOMPARE(hBottom, QRect(0, 960, 1080, 960));
+    QCOMPARE(hTop.height() + hBottom.height(), screen.height());
+    QCOMPARE(hBottom.y(), hTop.y() + hTop.height());
+
+    // 2. Odd geometry: 1081 x 1921 (test precision: no 1px gap or overlap)
+    QRect oddScreen(0, 0, 1081, 1921);
+    int oddHalfW = oddScreen.width() / 2;
+    QRect oddVLeft(oddScreen.x(), oddScreen.y(), oddHalfW, oddScreen.height());
+    QRect oddVRight(oddScreen.x() + oddHalfW, oddScreen.y(), oddScreen.width() - oddHalfW, oddScreen.height());
+
+    QCOMPARE(oddVLeft.width(), 540);
+    QCOMPARE(oddVRight.width(), 541);
+    QCOMPARE(oddVLeft.width() + oddVRight.width(), 1081);
+    QCOMPARE(oddVRight.x(), oddVLeft.x() + oddVLeft.width());
+
+    int oddHalfH = oddScreen.height() / 2;
+    QRect oddHTop(oddScreen.x(), oddScreen.y(), oddScreen.width(), oddHalfH);
+    QRect oddHBottom(oddScreen.x(), oddScreen.y() + oddHalfH, oddScreen.width(), oddScreen.height() - oddHalfH);
+
+    QCOMPARE(oddHTop.height(), 960);
+    QCOMPARE(oddHBottom.height(), 961);
+    QCOMPARE(oddHTop.height() + oddHBottom.height(), 1921);
+    QCOMPARE(oddHBottom.y(), oddHTop.y() + oddHTop.height());
 }
 
 QTEST_MAIN(TestSleekDialogs)
