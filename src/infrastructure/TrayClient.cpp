@@ -7,7 +7,7 @@ TrayClient::TrayClient(const QString& profileId, QObject* parent)
     connect(&m_socket, &QLocalSocket::readyRead, this, &TrayClient::onReadyRead);
     connect(&m_socket, &QLocalSocket::connected, this, &TrayClient::onConnected);
     connect(&m_socket, &QLocalSocket::disconnected, this, &TrayClient::onDisconnected);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
     connect(&m_socket, &QLocalSocket::errorOccurred, this, &TrayClient::onError);
 #else
     connect(&m_socket, QOverload<QLocalSocket::LocalSocketError>::of(&QLocalSocket::error), this, &TrayClient::onError);

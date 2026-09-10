@@ -126,7 +126,7 @@ QMenu* TrayDaemonWindow::createActiveProfileMenu(const QString& profileId, const
     m->setTitle(profileName);
     
     ConfigManager cm(profileId);
-    cm.loadConfig();
+    (void)cm.loadConfig();
     const auto& decks = cm.getDecks();
     
     for (int i = 0; i < decks.size(); ++i) {
