@@ -32,7 +32,6 @@ struct AppSettings {
     int swellDurationMs = ConfigDefaults::SWELL_DURATION_MS;
     int screenWidth = 0;
     int screenHeight = 0;
-    QString targetScreen = "auto";
     int targetWorkspace = -1;
 };
 

@@ -48,8 +48,7 @@ int main(int argc, char* argv[]) {
     QCommandLineOption trayOpt(QStringList() << "tray", "Run as headless IPC Tray Daemon.");
     parser.addOption(trayOpt);
     
-    QCommandLineOption screenOpt(QStringList() << "screen", "Specify target display screen.", "screen_name");
-    parser.addOption(screenOpt);
+
     
     parser.process(app);
 
@@ -136,37 +135,40 @@ int main(int argc, char* argv[]) {
         );
 
         // 3. Presentation Layer Setup - Dynamic Startup Screen Adaptation
-        QRect screenGeometry = QGuiApplication::primaryScreen() 
-            ? QGuiApplication::primaryScreen()->geometry() 
-            : xcbEngine.getScreenGeometry();
-        const auto& settings = config.getSettings();
-        QString cliScreen = parser.isSet(screenOpt) ? parser.value(screenOpt) : QString();
-        QString effectiveTargetScreen = !cliScreen.isEmpty() ? cliScreen : settings.targetScreen;
-        if (effectiveTargetScreen == "auto" || effectiveTargetScreen.isEmpty()) {
-            QPoint cursorPos = QCursor::pos();
-            QScreen* cursorScreen = QGuiApplication::screenAt(cursorPos);
-            if (cursorScreen) {
-                screenGeometry = cursorScreen->geometry();
-                qDebug() << "Startup screen auto-detected at cursor position" << cursorPos
-                         << "on display" << cursorScreen->name() << ":" << screenGeometry;
-            } else if (QScreen* primary = QGuiApplication::primaryScreen()) {
-                screenGeometry = primary->geometry();
-                qDebug() << "Fallback to primary screen" << primary->name() << ":" << screenGeometry;
-            }
-        } else {
-            bool found = false;
-            for (auto* s : QGuiApplication::screens()) {
-                if (s->name() == effectiveTargetScreen) {
-                    screenGeometry = s->geometry();
-                    found = true;
-                    qDebug() << "Using target screen by name:" << s->name() << ":" << screenGeometry;
-                    break;
+        QRect screenGeometry;
+        QPoint cursorPos = QCursor::pos();
+        QScreen* targetScreen = QGuiApplication::screenAt(cursorPos);
+        
+        // Fallback: If point is outside logical bounds (e.g. DPI scaling gaps), find the closest screen
+        if (!targetScreen) {
+            long long minDistance = -1;
+            for (QScreen* s : QGuiApplication::screens()) {
+                QPoint center = s->geometry().center();
+                long long dx = center.x() - cursorPos.x();
+                long long dy = center.y() - cursorPos.y();
+                long long dist = (dx * dx) + (dy * dy);
+                if (minDistance == -1 || dist < minDistance) {
+                    minDistance = dist;
+                    targetScreen = s;
                 }
             }
-            if (!found && settings.screenWidth > 0 && settings.screenHeight > 0) {
-                screenGeometry = QRect(0, 0, settings.screenWidth, settings.screenHeight);
-            }
         }
+
+        if (targetScreen) {
+            screenGeometry = targetScreen->geometry();
+            qDebug() << "Startup screen auto-detected based on cursor position" << cursorPos
+                     << "on display" << targetScreen->name() << ":" << screenGeometry;
+        } else if (QScreen* primary = QGuiApplication::primaryScreen()) {
+            screenGeometry = primary->geometry();
+            qDebug() << "Fallback to primary screen" << primary->name() << ":" << screenGeometry;
+        }
+        
+        // Final fallback if the user provided specific explicit bounds
+        const auto& settings = config.getSettings();
+        if (settings.screenWidth > 0 && settings.screenHeight > 0 && !targetScreen) {
+             screenGeometry = QRect(0, 0, settings.screenWidth, settings.screenHeight);
+        }
+
         OverlayWindow overlay(config, screenGeometry);
         overlay.setWindowIcon(app.windowIcon());
         controller.setOverlay(&overlay);

@@ -35,7 +35,6 @@ void TestConfigManager::testDefaultConfig() {
     const auto& settings = manager.getSettings();
     QCOMPARE(settings.gutterWidth, ConfigDefaults::GUTTER_WIDTH);
     QCOMPARE(settings.animationDurationMs, ConfigDefaults::ANIMATION_DURATION_MS);
-    QCOMPARE(settings.targetScreen, QString("auto"));
     QCOMPARE(settings.targetWorkspace, -1);
 }
 
@@ -52,7 +51,6 @@ void TestConfigManager::testSerializationRoundTrip() {
         s.gutterExpandedWidth = 60;
         s.animationDurationMs = 400;
         s.swellDurationMs = 150;
-        s.targetScreen = "HDMI-1";
         s.targetWorkspace = 2;
         writer.setSettings(s);
 
@@ -78,7 +76,6 @@ void TestConfigManager::testSerializationRoundTrip() {
         QCOMPARE(s.gutterExpandedWidth, 60);
         QCOMPARE(s.animationDurationMs, 400);
         QCOMPARE(s.swellDurationMs, 150);
-        QCOMPARE(s.targetScreen, QString("HDMI-1"));
         QCOMPARE(s.targetWorkspace, 2);
 
         const auto& decks = reader.getDecks();
@@ -97,7 +94,6 @@ void TestConfigManager::testValidationClamping() {
     s.gutterExpandedWidth = 2;       // Must clamp to >= gutterWidth + 4
     s.animationDurationMs = 99999;   // Must clamp to <= 2000
     s.swellDurationMs = 1;           // Must clamp to >= 50
-    s.targetScreen = "   ";          // Must clamp to "auto"
     manager.setSettings(s);
 
     const auto& validated = manager.getSettings();
@@ -105,7 +101,6 @@ void TestConfigManager::testValidationClamping() {
     QCOMPARE(validated.gutterExpandedWidth, 6);
     QCOMPARE(validated.animationDurationMs, 2000);
     QCOMPARE(validated.swellDurationMs, 50);
-    QCOMPARE(validated.targetScreen, QString("auto"));
 }
 
 void TestConfigManager::testLegacyGuttersSupport() {
@@ -147,7 +142,6 @@ void TestConfigManager::testLegacyGuttersSupport() {
     const auto& settings = reader.getSettings();
     QCOMPARE(settings.screenWidth, 1080);
     QCOMPARE(settings.screenHeight, 1920);
-    QCOMPARE(settings.targetScreen, QString("HDMI-1"));
 }
 
 void TestConfigManager::testDeckCRUDOperations() {

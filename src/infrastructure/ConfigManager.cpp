@@ -306,7 +306,6 @@ void ConfigManager::populateDefaultConfiguration() {
     m_settings.gutterExpandedWidth = ConfigDefaults::GUTTER_EXPANDED_WIDTH;
     m_settings.animationDurationMs = ConfigDefaults::ANIMATION_DURATION_MS;
     m_settings.swellDurationMs = ConfigDefaults::SWELL_DURATION_MS;
-    m_settings.targetScreen = "auto";
     m_settings.targetWorkspace = -1;
 }
 
@@ -316,9 +315,6 @@ void ConfigManager::validate() {
                                                 m_settings.gutterWidth + 4, 300);
     m_settings.animationDurationMs = std::clamp(m_settings.animationDurationMs, 50, 2000);
     m_settings.swellDurationMs = std::clamp(m_settings.swellDurationMs, 50, 1000);
-    if (m_settings.targetScreen.trimmed().isEmpty()) {
-        m_settings.targetScreen = "auto";
-    }
 
     if (m_decks.isEmpty()) {
         populateDefaultDecks();
@@ -381,7 +377,6 @@ bool ConfigManager::loadConfig() {
             .toInt(ConfigDefaults::SWELL_DURATION_MS);
         m_settings.screenWidth = settingsObj.value("screen_width").toInt(0);
         m_settings.screenHeight = settingsObj.value("screen_height").toInt(0);
-        m_settings.targetScreen = settingsObj.value("target_screen").toString("auto");
         m_settings.targetWorkspace = settingsObj.value("target_workspace").toInt(-1);
     }
 
@@ -431,9 +426,6 @@ bool ConfigManager::saveConfig() const {
     }
     if (m_settings.screenHeight > 0) {
         settingsObj["screen_height"] = m_settings.screenHeight;
-    }
-    if (!m_settings.targetScreen.isEmpty()) {
-        settingsObj["target_screen"] = m_settings.targetScreen;
     }
     if (m_settings.targetWorkspace >= 0) {
         settingsObj["target_workspace"] = m_settings.targetWorkspace;
