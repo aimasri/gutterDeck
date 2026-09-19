@@ -37,11 +37,14 @@ public:
 
     /**
      * @brief Starts listening for X11 root window events.
+     * @details Subscribes to PropertyChange and StructureNotify masks on root window,
+     *          populates initial client window list, and activates the QSocketNotifier.
      */
     void startWatching();
 
     /**
      * @brief Stops listening and disables the socket notifier.
+     * @details Clears active event subscriptions and deactivates QSocketNotifier.
      */
     void stopWatching();
 
@@ -93,6 +96,10 @@ signals:
     void globalScrollDown();
 
 private slots:
+    /**
+     * @brief Drains and processes all pending XCB events from the display socket.
+     * @details Dispatches property notify, key press, and button press events to corresponding handlers.
+     */
     void processXcbEvents();
 
 private:
@@ -104,5 +111,8 @@ private:
     xcb_atom_t m_netCurrentDesktopAtom = XCB_NONE;
     bool m_isWatching = false;
 
+    /**
+     * @brief Re-queries _NET_CLIENT_LIST from root window and emits mapping signals for new windows.
+     */
     void refreshClientList();
 };

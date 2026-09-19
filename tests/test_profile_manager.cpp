@@ -70,6 +70,28 @@ private slots:
         ConfigManager::setAutoLaunchProfile("");
         QCOMPARE(ConfigManager::getAutoLaunchProfile(), QString());
     }
+
+    void testReorderAndMoveProfile() {
+        QVERIFY(ConfigManager::createProfile("Alpha", QColor("#111111")));
+        QVERIFY(ConfigManager::createProfile("Beta", QColor("#222222")));
+
+        auto profiles = ConfigManager::listProfiles();
+        QCOMPARE(profiles.size(), 3);
+
+        // Move "beta" left by 1
+        QVERIFY(ConfigManager::moveProfile("beta", -1));
+        profiles = ConfigManager::listProfiles();
+        QCOMPARE(profiles[0].id, QString("default"));
+        QCOMPARE(profiles[1].id, QString("beta"));
+        QCOMPARE(profiles[2].id, QString("alpha"));
+
+        // Arbitrary reorder
+        QVERIFY(ConfigManager::reorderProfiles({"alpha", "default", "beta"}));
+        profiles = ConfigManager::listProfiles();
+        QCOMPARE(profiles[0].id, QString("alpha"));
+        QCOMPARE(profiles[1].id, QString("default"));
+        QCOMPARE(profiles[2].id, QString("beta"));
+    }
 };
 
 QTEST_MAIN(TestProfileManager)

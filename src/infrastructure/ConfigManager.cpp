@@ -228,6 +228,85 @@ bool ConfigManager::updateProfileColor(const QString& profileId, const QColor& n
     return false;
 }
 
+bool ConfigManager::reorderProfiles(const QVector<QString>& newProfileIds) {
+    auto currentProfiles = listProfiles();
+    if (currentProfiles.isEmpty() || newProfileIds.isEmpty()) {
+        return false;
+    }
+
+    QVector<ProfileInfo> reordered;
+    reordered.reserve(currentProfiles.size());
+
+    // 1. Place profiles according to newProfileIds
+    for (const QString& id : newProfileIds) {
+        auto it = std::find_if(currentProfiles.begin(), currentProfiles.end(),
+                               [&id](const ProfileInfo& p) { return p.id == id; });
+        if (it != currentProfiles.end()) {
+            reordered.append(*it);
+        }
+    }
+
+    // 2. Safety: Append any profiles that might have been missing from newProfileIds
+    for (const auto& p : currentProfiles) {
+        if (!newProfileIds.contains(p.id)) {
+            reordered.append(p);
+        }
+    }
+
+    QJsonObject root;
+    QFile file(getProfilesRegistryPath());
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        root = QJsonDocument::fromJson(file.readAll()).object();
+        file.close();
+    }
+
+    QJsonArray arr;
+    for (const auto& p : reordered) {
+        QJsonObject obj;
+        obj["id"] = p.id;
+        obj["displayName"] = p.displayName;
+        obj["accentColor"] = p.accentColor.name(QColor::HexArgb);
+        arr.append(obj);
+    }
+    root["profiles"] = arr;
+
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+        return true;
+    }
+    return false;
+}
+
+bool ConfigManager::moveProfile(const QString& profileId, int delta) {
+    auto profiles = listProfiles();
+    int idx = -1;
+    for (int i = 0; i < profiles.size(); ++i) {
+        if (profiles[i].id == profileId) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx == -1) {
+        return false;
+    }
+
+    int targetIdx = idx + delta;
+    if (targetIdx < 0 || targetIdx >= profiles.size() || targetIdx == idx) {
+        return false;
+    }
+
+    std::swap(profiles[idx], profiles[targetIdx]);
+
+    QVector<QString> newIds;
+    newIds.reserve(profiles.size());
+    for (const auto& p : profiles) {
+        newIds.append(p.id);
+    }
+
+    return reorderProfiles(newIds);
+}
+
 void ConfigManager::migrateIfNeeded() {
     QFile registryFile(getProfilesRegistryPath());
     if (registryFile.exists()) {
@@ -266,12 +345,17 @@ ConfigManager::ConfigManager(const QString& profileIdOrPath) {
         if (profileIdOrPath.contains('/') || profileIdOrPath.endsWith(".json", Qt::CaseInsensitive)) {
             m_customConfigPath = profileIdOrPath;
         } else {
+            m_profileId = profileIdOrPath;
             m_customConfigPath = getProfileConfigPath(profileIdOrPath);
         }
     } else {
         // Fallback for tests or single-instance
         m_customConfigPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + "/gutter-deck/config.json";
     }
+}
+
+QString ConfigManager::getProfileId() const noexcept {
+    return m_profileId;
 }
 
 QString ConfigManager::getConfigDirPath() const {

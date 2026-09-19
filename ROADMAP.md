@@ -74,6 +74,14 @@ This document serves as the canonical feature roadmap and architectural plan for
 - **Concept:** Native X11 grab of Button 4 and Button 5 with `ControlMask | ShiftMask`.
 - **Behavior:** Holding `Ctrl + Shift` and scrolling the mouse anywhere on the screen bypasses the active application and seamlessly cycles the gutterDeck curtains.
 
+### 3. Multi-Profile Orchestration & Management
+- **Concept:** Completely isolated deck profiles with dedicated JSON configurations, dark-mode visual picker, in-dock switcher, and reordering.
+- **Features:**
+  - **Visual Profile Picker:** Dark-mode modal with auto-centering on cursor screen, initials avatar, and deck palette preview.
+  - **In-Dock Profile Switcher:** Gutter context menu submenu allowing graceful window handoff between profiles and on-the-fly "Manage Profiles..." modal opening.
+  - **Profile Reordering:** Reorder via "Reorder Profiles" dialog or card context menu ("Move Left" / "Move Right"), backed by atomic registry updates.
+  - **Deterministic CLI Launching:** Direct startup via `-p <profile_id>` while bare `gutterdeck` always presents the profile picker.
+
 ---
 
 ## Phase 4: Multi-Deck Workspace Layouts (Completed ✅)

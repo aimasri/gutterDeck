@@ -25,7 +25,12 @@ enum class AppState;
 class OverlayWindow : public QWidget {
     Q_OBJECT
 public:
+    /**
+     * @brief Locks or unlocks gutter hover swell animations during context menus and modal dialogs.
+     * @param locked True to freeze hover states and prevent accidental trigger wipes.
+     */
     void setHoverLock(bool locked);
+
     /**
      * @brief Constructs overlay window sized to screen geometry.
      * @param config Reference to application configuration.
@@ -55,11 +60,13 @@ public:
 
     /**
      * @brief Accessor to the child curtain transition widget.
+     * @return Non-owning pointer to CurtainWidget.
      */
     [[nodiscard]] CurtainWidget* curtain() const noexcept;
 
     /**
      * @brief Accessor to all managed gutter child widgets.
+     * @return Const reference to QVector of GutterWidget pointers.
      */
     [[nodiscard]] const QVector<GutterWidget*>& gutters() const noexcept;
 
@@ -70,6 +77,9 @@ public:
 
     /**
      * @brief Updates visuals for a specific deck tab without rebuilding layout.
+     * @param index Target deck index.
+     * @param name Updated display name.
+     * @param color Updated tab color.
      */
     void updateGutterVisuals(int index, const QString& name, const QColor& color);
 
@@ -89,24 +99,76 @@ public:
 
     /**
      * @brief Queries whether the overlay is currently in split layout mode.
+     * @return True if in split view mode.
      */
     [[nodiscard]] bool isSplitMode() const noexcept;
 
 signals:
+    /**
+     * @brief Emitted when a gutter tab is clicked.
+     * @param index Zero-based index of the clicked gutter.
+     */
     void gutterClicked(int index);
+
+    /**
+     * @brief Emitted when a split view transition is requested with an adjacent deck.
+     * @param index Zero-based index of target adjacent deck.
+     * @param orientation Vertical or Horizontal split.
+     */
     void splitRequested(int index, SplitOrientation orientation);
+
+    /**
+     * @brief Emitted when previous deck navigation is triggered.
+     */
     void previousRequested();
+
+    /**
+     * @brief Emitted when next deck navigation is triggered.
+     */
     void nextRequested();
+
+    /**
+     * @brief Emitted when a user right-clicks a gutter tab to open the context menu.
+     * @param index Zero-based index of right-clicked gutter.
+     * @param globalPos Global screen cursor position.
+     */
     void contextMenuRequested(int index, const QPoint& globalPos);
 
 protected:
+    /**
+     * @brief Refreshes XShape mask when window is shown.
+     * @param event QShowEvent details.
+     */
     void showEvent(QShowEvent* event) override;
+
+    /**
+     * @brief Recalculates layout bounds on screen resize.
+     * @param event QResizeEvent details.
+     */
     void resizeEvent(QResizeEvent* event) override;
+
+    /**
+     * @brief Clears background to pure transparency.
+     * @param event QPaintEvent details.
+     */
     void paintEvent(QPaintEvent* event) override;
 
 private slots:
+    /**
+     * @brief Invoked during gutter width animations to dynamically update the XShape mask.
+     */
     void onGutterHoverChanged();
+
+    /**
+     * @brief Invoked when mouse cursor enters a specific gutter.
+     * @param index Deck index hovered.
+     */
     void onGutterHoverEntered(int index);
+
+    /**
+     * @brief Invoked when mouse cursor leaves a specific gutter.
+     * @param index Deck index unhovered.
+     */
     void onGutterHoverLeft(int index);
     void onLeaveDebounceTimeout();
 

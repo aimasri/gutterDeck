@@ -56,19 +56,82 @@ public:
     GutterWidget(GutterWidget&&) = delete;
     GutterWidget& operator=(GutterWidget&&) = delete;
 
+    /**
+     * @brief Gets the zero-based deck index represented by this tab.
+     * @return Integer deck index.
+     */
     [[nodiscard]] int index() const noexcept;
+
+    /**
+     * @brief Gets the label text displayed on this tab.
+     * @return Display name string.
+     */
     [[nodiscard]] QString name() const;
+
+    /**
+     * @brief Gets the accent color of this tab.
+     * @return QColor value.
+     */
     [[nodiscard]] QColor color() const noexcept;
+
+    /**
+     * @brief Checks whether this deck is currently active and focused.
+     * @return True if currently active.
+     */
     [[nodiscard]] bool isActive() const noexcept;
+
+    /**
+     * @brief Gets the current animated width of the tab in pixels.
+     * @return Pixel width.
+     */
     [[nodiscard]] int gutterWidth() const noexcept;
+
+    /**
+     * @brief Gets the current swell animation stage (Collapsed, Halfway, Expanded).
+     * @return SwellStage enum value.
+     */
     [[nodiscard]] SwellStage swellStage() const noexcept;
+
+    /**
+     * @brief Checks whether the tab is positioned on the left side of the active deck.
+     * @return True if positioned to the left.
+     */
     [[nodiscard]] bool isLeftSide() const noexcept;
 
+    /**
+     * @brief Sets whether this deck is marked as active.
+     * @param active True to mark active.
+     */
     void setActive(bool active);
+
+    /**
+     * @brief Sets the pixel width of the gutter (invoked by QPropertyAnimation).
+     * @param width New pixel width.
+     */
     void setGutterWidth(int width);
+
+    /**
+     * @brief Sets the swell stage for visual styling.
+     * @param stage SwellStage value.
+     */
     void setSwellStage(SwellStage stage);
+
+    /**
+     * @brief Configures whether this gutter tab is anchored to the left or right of the screen.
+     * @param left True for left side, false for right side.
+     */
     void setLeftSide(bool left);
+
+    /**
+     * @brief Updates the tab label name.
+     * @param name New display label.
+     */
     void setName(const QString& name);
+
+    /**
+     * @brief Updates the tab color and triggers visual repaint.
+     * @param color New accent color.
+     */
     void setColor(const QColor& color);
 
 signals:
@@ -99,11 +162,13 @@ signals:
 
     /**
      * @brief Emitted when mouse enters this gutter tab.
+     * @param index Zero-based index of this deck.
      */
     void hoverEntered(int index);
 
     /**
      * @brief Emitted when mouse leaves this gutter tab.
+     * @param index Zero-based index of this deck.
      */
     void hoverLeft(int index);
 
@@ -118,12 +183,46 @@ signals:
     void nextRequested();
 
 protected:
+    /**
+     * @brief Handles mouse cursor entry to initiate swell animation and emit hover signals.
+     * @param event Pointer to enter event.
+     */
     void enterEvent(QEnterEvent* event) override;
+
+    /**
+     * @brief Handles mouse cursor exit to collapse swell and emit leave signals.
+     * @param event Pointer to leave event.
+     */
     void leaveEvent(QEvent* event) override;
+
+    /**
+     * @brief Tracks cursor coordinate to distinguish inactive top-zone from interactive tab area.
+     * @param event Pointer to mouse move event.
+     */
     void mouseMoveEvent(QMouseEvent* event) override;
+
+    /**
+     * @brief Handles mouse clicks for deck switching, split-view requests, or context menus.
+     * @param event Pointer to mouse press event.
+     */
     void mousePressEvent(QMouseEvent* event) override;
+
+    /**
+     * @brief Handles mouse wheel scrolling for cycling through deck tabs.
+     * @param event Pointer to wheel event.
+     */
     void wheelEvent(QWheelEvent* event) override;
+
+    /**
+     * @brief Handles keyboard navigation (Return/Space to activate, Arrow keys to navigate).
+     * @param event Pointer to key event.
+     */
     void keyPressEvent(QKeyEvent* event) override;
+
+    /**
+     * @brief Renders the gutter tab background, border accent, and vertical rotated text.
+     * @param event Pointer to paint event.
+     */
     void paintEvent(QPaintEvent* event) override;
 
 private:

@@ -46,22 +46,28 @@ public:
 
     /**
      * @brief Queries the active state.
+     * @return Current AppState enumeration value.
      */
     [[nodiscard]] AppState currentState() const noexcept;
 
     /**
      * @brief Convenience check if the state is IDLE.
+     * @return True if currently in AppState::IDLE; false if a transition is in flight.
      */
     [[nodiscard]] bool isIdle() const noexcept;
 
     /**
      * @brief Emergency reset to IDLE state, disabling watchdog timer.
+     * @details Invoked during recovery pathways or window recreation to clear lockups.
+     * @note Guarantees immediate restoration of user interactivity.
      */
     void forceReset();
 
 signals:
     /**
      * @brief Emitted whenever the active state changes.
+     * @param oldState State immediately prior to transition.
+     * @param newState State after transition was accepted.
      */
     void stateChanged(AppState oldState, AppState newState);
 
@@ -71,6 +77,9 @@ signals:
     void watchdogTriggered();
 
 private slots:
+    /**
+     * @brief Slot triggered when the watchdog timer expires while non-IDLE.
+     */
     void onWatchdogTimeout();
 
 private:
@@ -78,5 +87,11 @@ private:
     QTimer m_watchdogTimer;
     int m_timeoutMs;
 
+    /**
+     * @brief Evaluates whether a transition between two discrete states is valid.
+     * @param from Origin state.
+     * @param to Destination state.
+     * @return True if transition conforms to the defined lifecycle graph.
+     */
     [[nodiscard]] bool isValidTransition(AppState from, AppState to) const noexcept;
 };

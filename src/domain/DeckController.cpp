@@ -9,9 +9,11 @@
 #include "../presentation/GutterWidget.h"
 #include "../presentation/AppIcon.h"
 #include "../presentation/SleekDialogs.h"
+#include "../presentation/ProfilePickerWindow.h"
 
 #include <QAction>
 #include <QApplication>
+#include <QProcess>
 #include <QDateTime>
 #include <QDebug>
 #include <QElapsedTimer>
@@ -774,6 +776,29 @@ void DeckController::onGutterContextMenuRequested(int index, const QPoint& globa
     }
 
     menu.addSeparator();
+    auto* switchProfileMenu = new SleekContextMenu(&menu);
+    switchProfileMenu->setTitle(QStringLiteral("Switch Profile"));
+
+    QString currentProfileId = m_config.getProfileId();
+    auto profiles = ConfigManager::listProfiles();
+    QMap<QAction*, QString> profileActions;
+
+    for (const auto& p : profiles) {
+        bool isCurrent = (!currentProfileId.isEmpty() && p.id == currentProfileId);
+        QString label = isCurrent ? QStringLiteral("● %1 (Current)").arg(p.displayName) : p.displayName;
+        auto* act = switchProfileMenu->addAction(label);
+        if (isCurrent) {
+            act->setEnabled(false);
+        } else {
+            profileActions[act] = p.id;
+        }
+    }
+
+    switchProfileMenu->addSeparator();
+    auto* manageProfilesAct = switchProfileMenu->addAction(QStringLiteral("Manage Profiles..."));
+    menu.addMenu(switchProfileMenu);
+
+    menu.addSeparator();
     auto* deleteDeckAct = menu.addAction(getSleekMenuIcon(SleekMenuIcon::DeleteDeck), QStringLiteral("Delete Deck"));
 
     if (m_decks.size() <= 1) {
@@ -801,6 +826,10 @@ void DeckController::onGutterContextMenuRequested(int index, const QPoint& globa
         onAddNewDeck(index);
     } else if (selected == reorderDecksAct) {
         onReorderDecks();
+    } else if (profileActions.contains(selected)) {
+        onSwitchProfile(profileActions[selected]);
+    } else if (selected == manageProfilesAct) {
+        onOpenProfileManager();
     } else if (selected == splitVertAct) {
         onSplitRequested(index, SplitOrientation::Vertical);
     } else if (selected == splitHorzAct) {
@@ -999,6 +1028,55 @@ void DeckController::onReorderDecks() {
             m_overlay->setActiveGutter(m_activeDeckIndex);
         }
     }
+}
+
+void DeckController::onSwitchProfile(const QString& targetProfileId) {
+    if (targetProfileId.isEmpty() || targetProfileId == m_config.getProfileId()) {
+        return;
+    }
+
+    qDebug() << "Switching profile to:" << targetProfileId;
+
+    // 1. Launch new profile instance detached
+    bool started = QProcess::startDetached(
+        QCoreApplication::applicationFilePath(),
+        QStringList() << "-p" << targetProfileId
+    );
+
+    if (!started) {
+        qWarning() << "Failed to start detached process for profile:" << targetProfileId;
+        return;
+    }
+
+    // 2. Gracefully close current deck session
+    closeGutterDeck();
+}
+
+void DeckController::onOpenProfileManager() {
+    auto* picker = new ProfilePickerWindow();
+    picker->setAttribute(Qt::WA_DeleteOnClose);
+
+    if (m_overlay) {
+        m_overlay->setHoverLock(true);
+    }
+
+    connect(picker, &ProfilePickerWindow::profileSelected, this, [this, picker](const QString& profileId) {
+        if (m_overlay) {
+            m_overlay->setHoverLock(false);
+        }
+        picker->close();
+        if (!profileId.isEmpty() && profileId != m_config.getProfileId()) {
+            onSwitchProfile(profileId);
+        }
+    });
+
+    connect(picker, &ProfilePickerWindow::closedWithoutSelection, this, [this]() {
+        if (m_overlay) {
+            m_overlay->setHoverLock(false);
+        }
+    });
+
+    picker->show();
 }
 
 void DeckController::onCloseDeck(int index) {

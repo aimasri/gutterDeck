@@ -83,22 +83,19 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
         } else {
-            targetProfileId = ConfigManager::getAutoLaunchProfile();
-            if (targetProfileId.isEmpty() || !ConfigManager::profileExists(targetProfileId)) {
-                ProfilePickerWindow picker;
-                QObject::connect(&picker, &ProfilePickerWindow::profileSelected, [&](const QString& id) {
-                    targetProfileId = id;
-                    picker.close();
-                });
-                QObject::connect(&picker, &ProfilePickerWindow::closedWithoutSelection, [&]() {
-                    QApplication::quit();
-                });
-                picker.show();
-                app.exec(); // Phase 1 Event Loop
-                
-                if (targetProfileId.isEmpty()) {
-                    return 0; // User closed picker
-                }
+            ProfilePickerWindow picker;
+            QObject::connect(&picker, &ProfilePickerWindow::profileSelected, [&](const QString& id) {
+                targetProfileId = id;
+                picker.close();
+            });
+            QObject::connect(&picker, &ProfilePickerWindow::closedWithoutSelection, [&]() {
+                QApplication::quit();
+            });
+            picker.show();
+            app.exec(); // Phase 1 Event Loop
+            
+            if (targetProfileId.isEmpty()) {
+                return 0; // User closed picker
             }
         }
 

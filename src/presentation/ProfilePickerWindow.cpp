@@ -176,13 +176,25 @@ void ProfilePickerWindow::buildUI() {
 
     // Bottom Bar
     auto* bottomLayout = new QHBoxLayout();
-    m_autoLaunchCheck = new QCheckBox("Always use selected profile on startup", this);
-    m_autoLaunchCheck->setStyleSheet(
-        "QCheckBox { color: #a1a1aa; font-size: 13px; }"
-        "QCheckBox::indicator { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #3f3f46; background: #18181b; }"
-        "QCheckBox::indicator:checked { image: url(data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'><path d='M18 6 6 18'/><path d='m6 6 12 12'/></svg>); }"
+    
+    auto* reorderBtn = new QPushButton("Reorder Profiles", this);
+    reorderBtn->setStyleSheet(
+        "QPushButton {"
+        "  background-color: transparent;"
+        "  color: #a1a1aa;"
+        "  border: 1px solid #3f3f46;"
+        "  border-radius: 6px;"
+        "  padding: 8px 16px;"
+        "  font-weight: bold;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #27272a;"
+        "  color: white;"
+        "}"
     );
-    bottomLayout->addWidget(m_autoLaunchCheck);
+    connect(reorderBtn, &QPushButton::clicked, this, &ProfilePickerWindow::onReorderProfilesClicked);
+    bottomLayout->addWidget(reorderBtn);
+
     bottomLayout->addStretch();
     
     auto* addProfileBtn = new QPushButton("+ Add Profile", this);
@@ -218,8 +230,8 @@ void ProfilePickerWindow::rebuildProfileCards() {
     int col = 0;
     int maxCols = 3;
 
-    for (const auto& p : profiles) {
-        QWidget* card = createProfileCard(p);
+    for (int i = 0; i < profiles.size(); ++i) {
+        QWidget* card = createProfileCard(profiles[i], i, profiles.size());
         m_cardsLayout->addWidget(card, row, col);
         
         col++;
@@ -230,20 +242,33 @@ void ProfilePickerWindow::rebuildProfileCards() {
     }
 }
 
-QWidget* ProfilePickerWindow::createProfileCard(const ProfileInfo& profile) {
+QWidget* ProfilePickerWindow::createProfileCard(const ProfileInfo& profile, int index, int totalCount) {
     auto* card = new ProfileCard(profile, this);
     
     connect(card, &ProfileCard::clicked, this, &ProfilePickerWindow::onProfileCardClicked);
-    connect(card, &ProfileCard::rightClicked, this, [this](const QString& id, const QPoint& pos) {
+    connect(card, &ProfileCard::rightClicked, this, [this, index, totalCount](const QString& id, const QPoint& pos) {
         SleekContextMenu menu(this);
         
         auto* renameAction = menu.addAction(getSleekMenuIcon(SleekMenuIcon::EditName), "Rename Profile...");
         auto* colorAction = menu.addAction(getSleekMenuIcon(SleekMenuIcon::ChangeColor), "Change Color...");
         menu.addSeparator();
+
+        auto* moveLeftAction = menu.addAction("Move Left");
+        moveLeftAction->setEnabled(index > 0);
+
+        auto* moveRightAction = menu.addAction("Move Right");
+        moveRightAction->setEnabled(index < totalCount - 1);
+
+        auto* reorderAction = menu.addAction(getSleekMenuIcon(SleekMenuIcon::ReorderDecks), "Reorder Profiles...");
+        if (totalCount <= 1) {
+            reorderAction->setEnabled(false);
+        }
+
+        menu.addSeparator();
         auto* deleteAction = menu.addAction(getSleekMenuIcon(SleekMenuIcon::DeleteDeck), "Delete Profile");
         
         // Prevent deleting the only profile
-        if (ConfigManager::listProfiles().size() <= 1) {
+        if (totalCount <= 1) {
             deleteAction->setEnabled(false);
         }
 
@@ -252,6 +277,12 @@ QWidget* ProfilePickerWindow::createProfileCard(const ProfileInfo& profile) {
             onEditProfileName(id);
         } else if (selected == colorAction) {
             onEditProfileColor(id);
+        } else if (selected == moveLeftAction) {
+            onMoveProfile(id, -1);
+        } else if (selected == moveRightAction) {
+            onMoveProfile(id, 1);
+        } else if (selected == reorderAction) {
+            onReorderProfilesClicked();
         } else if (selected == deleteAction) {
             onDeleteProfile(id);
         }
@@ -262,10 +293,44 @@ QWidget* ProfilePickerWindow::createProfileCard(const ProfileInfo& profile) {
 
 void ProfilePickerWindow::onProfileCardClicked(const QString& profileId) {
     m_selected = true;
-    if (m_autoLaunchCheck->isChecked()) {
-        ConfigManager::setAutoLaunchProfile(profileId);
-    }
     emit profileSelected(profileId);
+}
+
+void ProfilePickerWindow::onMoveProfile(const QString& profileId, int delta) {
+    if (ConfigManager::moveProfile(profileId, delta)) {
+        rebuildProfileCards();
+    }
+}
+
+void ProfilePickerWindow::onReorderProfilesClicked() {
+    auto profiles = ConfigManager::listProfiles();
+    if (profiles.size() <= 1) {
+        return;
+    }
+
+    QVector<ReorderableItem> items;
+    items.reserve(profiles.size());
+    for (int i = 0; i < profiles.size(); ++i) {
+        items.append(ReorderableItem{i, profiles[i].id, profiles[i].displayName, profiles[i].accentColor});
+    }
+
+    SleekReorderDialog dlg(
+        QStringLiteral("Reorder Profiles"),
+        QStringLiteral("Select a profile and use Move Up / Move Down to change order:"),
+        items,
+        0,
+        this
+    );
+    dlg.adjustSize();
+    dlg.move(geometry().center() - dlg.rect().center());
+
+    if (dlg.exec() == QDialog::Accepted) {
+        QVector<QString> newIdOrder = dlg.newIdOrder();
+        if (!newIdOrder.isEmpty()) {
+            ConfigManager::reorderProfiles(newIdOrder);
+            rebuildProfileCards();
+        }
+    }
 }
 
 void ProfilePickerWindow::onAddProfileClicked() {

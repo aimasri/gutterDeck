@@ -14,6 +14,10 @@
 class CurtainWidget : public QWidget {
     Q_OBJECT
 public:
+    /**
+     * @brief Constructs the transition curtain widget.
+     * @param parent Optional parent widget (typically OverlayWindow).
+     */
     explicit CurtainWidget(QWidget* parent = nullptr);
     ~CurtainWidget() override = default;
 
@@ -40,6 +44,7 @@ public:
 
     /**
      * @brief Sets the solid background fill color of the curtain.
+     * @param color The QColor used to paint the curtain surface.
      */
     void setColor(const QColor& color);
 
@@ -50,9 +55,16 @@ signals:
     void slideComplete();
 
 protected:
+    /**
+     * @brief Paints the solid background color across the active curtain bounds.
+     * @param event Pointer to paint event.
+     */
     void paintEvent(QPaintEvent* event) override;
 
 private slots:
+    /**
+     * @brief Internal slot invoked when QPropertyAnimation completes.
+     */
     void onAnimationFinished();
 
 private:

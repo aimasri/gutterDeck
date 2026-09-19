@@ -45,10 +45,15 @@ public:
     [[nodiscard]] xcb_screen_t* defaultScreen() const noexcept;
 
     /**
-     * @brief Gets the non-owning pointer to EWMH connection handle.
+     * @brief Gets the non-owning mutable pointer to EWMH connection handle.
      * @return Pointer to xcb_ewmh_connection_t.
      */
     [[nodiscard]] xcb_ewmh_connection_t* ewmh() noexcept;
+
+    /**
+     * @brief Gets the non-owning constant pointer to EWMH connection handle.
+     * @return Constant pointer to xcb_ewmh_connection_t.
+     */
     [[nodiscard]] const xcb_ewmh_connection_t* ewmh() const noexcept;
 
     /**
@@ -66,11 +71,19 @@ public:
 
     /**
      * @brief Flushes any buffered outgoing requests to the X server.
+     * @details Forces immediate dispatch of batched requests without blocking for a reply.
      */
     void flush() const noexcept;
 
 private:
+    /**
+     * @brief Custom RAII deleter functor that calls xcb_disconnect.
+     */
     struct XcbDisconnector {
+        /**
+         * @brief Disconnects the XCB connection.
+         * @param c Pointer to xcb_connection_t.
+         */
         void operator()(xcb_connection_t* c) const noexcept;
     };
 

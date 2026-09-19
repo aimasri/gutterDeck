@@ -60,16 +60,19 @@ public:
 
     /**
      * @brief Inserts an empty PID entry for a newly added deck at a specific index.
+     * @param index Zero-based slot index where the new deck is being inserted.
      */
     void insertDeck(int index);
 
     /**
      * @brief Removes tracked PID entry for a deleted deck index.
+     * @param index Zero-based slot index of the deck being removed.
      */
     void removeDeck(int index);
 
     /**
      * @brief Reorders tracked PIDs matching a new deck index permutation.
+     * @param newOrder Vector containing previous deck indices in their new sequence.
      */
     void reorderDecks(const QVector<int>& newOrder);
 
@@ -88,6 +91,9 @@ signals:
     void allDecksLaunched();
 
 private slots:
+    /**
+     * @brief Timer callback that launches the next configured deck in the staggered sequence.
+     */
     void onLaunchNextStaggered();
 
 private:

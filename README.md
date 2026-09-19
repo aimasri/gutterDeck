@@ -355,6 +355,8 @@ Right-clicking any gutter tab opens an Openbox-styled dark context menu:
 │  ➕ Add Deck...                      │
 │  ↕  Reorder Decks...                 │
 ├──────────────────────────────────────┤
+│  🔀 Switch Profile                 ▶ │
+├──────────────────────────────────────┤
 │  🗑  Delete Deck                      │
 ├──────────────────────────────────────┤
 │  ✕  Close gutterDeck                 │
@@ -366,6 +368,7 @@ Right-clicking any gutter tab opens an Openbox-styled dark context menu:
 - **Change Color & Opacity:** Sleek color picker offering 24 modern dark-mode swatches, hex string input, and an interactive alpha opacity slider (0–255).
 - **Add Deck:** Dialog to configure a new slot with name, executable command, color swatch, and insertion position (**Left** or **Right** of the active tab).
 - **Reorder Decks:** Modal list with **Move Up** and **Move Down** controls to physically rearrange deck positions.
+- **Switch Profile:** Submenu displaying all configured profiles, with the currently running profile highlighted (`● Current`). Selecting another profile performs a graceful window handoff (restoring and closing managed windows cleanly before spawning the target profile). Also provides a **Manage Profiles...** option to open the full visual picker directly from the dock.
 - **Real-Time Persistence:** Every modification is atomically written to `~/.config/gutter-deck/config.json`.
 
 ---
@@ -419,13 +422,15 @@ gutterDeck provides native configuration support for multi-monitor setups and de
 
 gutterDeck supports completely isolated configuration profiles. This allows you to create completely separate groupings of decks (e.g., a "Work" profile, a "Gaming" profile, and a "Casual" profile), each with their own decks, names, commands, and colors.
 
-- **Profile Picker Screen:** On launch, if no default is specified, you are greeted with a sleek, dark-mode profile selection screen (inspired by Chrome's profile picker). It features profile cards with colored avatars and miniature "deck color bar" previews of the decks inside them.
+- **Profile Picker Screen:** Running `gutterdeck` without CLI flags always presents a sleek, dark-mode profile selection screen (inspired by Chrome's profile picker). It features profile cards with colored avatars and miniature "deck color bar" previews of the decks inside them.
 - **Smart Centering:** The profile picker auto-detects the screen your mouse cursor is currently on and centers itself there, ensuring a seamless multi-monitor experience.
-- **Auto-Launch:** You can check "Always use selected profile on startup" to bypass the picker in the future.
-- **CLI Integration:** You can integrate gutterDeck into your custom launcher scripts or keyboard shortcuts using the new CLI flags:
-  - `gutterdeck --profile work` : Instantly launch the "work" profile, bypassing the picker.
-  - `gutterdeck --list-profiles` : Print a list of available profiles to stdout.
-  - `gutterdeck --reset-auto-launch` : Clear your auto-launch preference and force the picker to show.
+- **Profile Reordering:**
+  - **Reorder Profiles Button:** Click the "Reorder Profiles" button in the bottom bar of the picker to open the modal reorder dialog with **Move Up** and **Move Down** controls.
+  - **Context Menu:** Right-click any profile card to directly select **Move Left** or **Move Right** to shift positions, or launch the reorder modal.
+- **CLI Integration:** You can integrate gutterDeck into your custom launcher scripts, Openbox autostart, or keyboard shortcuts using CLI flags:
+  - `gutterdeck -p <profile>` (or `--profile <profile>`): Instantly launch a specific profile, bypassing the picker.
+  - `gutterdeck -l` (or `--list-profiles`): Print a list of available profiles to stdout.
+  - `gutterdeck -r` (or `--reset-auto-launch`): Clear legacy auto-launch preferences.
 
 ---
 

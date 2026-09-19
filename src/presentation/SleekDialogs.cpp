@@ -782,6 +782,32 @@ SleekReorderDialog::SleekReorderDialog(
     int activeIndex,
     QWidget* parent
 ) : QDialog(parent) {
+    QVector<ReorderableItem> items;
+    items.reserve(decks.size());
+    for (int i = 0; i < decks.size(); ++i) {
+        items.append(ReorderableItem{decks[i].originalIndex, QString(), decks[i].name, decks[i].color});
+    }
+    initUI(QStringLiteral("Reorder Decks"),
+           QStringLiteral("Select a deck tab and use Move Up / Move Down to change order:"),
+           items, activeIndex);
+}
+
+SleekReorderDialog::SleekReorderDialog(
+    const QString& title,
+    const QString& subtitle,
+    const QVector<ReorderableItem>& items,
+    int activeIndex,
+    QWidget* parent
+) : QDialog(parent) {
+    initUI(title, subtitle, items, activeIndex);
+}
+
+void SleekReorderDialog::initUI(
+    const QString& title,
+    const QString& subtitle,
+    const QVector<ReorderableItem>& items,
+    int activeIndex
+) {
     setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_TranslucentBackground);
     setFixedWidth(420);
@@ -798,11 +824,11 @@ SleekReorderDialog::SleekReorderDialog(
     cardLayout->setContentsMargins(20, 20, 20, 20);
     cardLayout->setSpacing(12);
 
-    auto* titleLbl = new QLabel("Reorder Decks", card);
+    auto* titleLbl = new QLabel(title, card);
     titleLbl->setObjectName("titleLabel");
     cardLayout->addWidget(titleLbl);
 
-    auto* subLbl = new QLabel("Select a deck tab and use Move Up / Move Down to change order:", card);
+    auto* subLbl = new QLabel(subtitle, card);
     subLbl->setObjectName("subLabel");
     subLbl->setWordWrap(true);
     cardLayout->addWidget(subLbl);
@@ -813,14 +839,15 @@ SleekReorderDialog::SleekReorderDialog(
     m_listWidget = new QListWidget(card);
     m_listWidget->setFixedHeight(200);
 
-    for (int i = 0; i < decks.size(); ++i) {
+    for (int i = 0; i < items.size(); ++i) {
         auto* item = new QListWidgetItem(m_listWidget);
-        item->setText(decks[i].name);
-        item->setData(Qt::UserRole, decks[i].originalIndex);
+        item->setText(items[i].label);
+        item->setData(Qt::UserRole, items[i].originalIndex);
+        item->setData(Qt::UserRole + 1, items[i].id);
 
         // Color badge
         QPixmap pix(12, 12);
-        pix.fill(decks[i].color.isValid() ? decks[i].color : QColor("#6366f1"));
+        pix.fill(items[i].color.isValid() ? items[i].color : QColor("#6366f1"));
         item->setIcon(QIcon(pix));
     }
 
@@ -916,6 +943,18 @@ QVector<int> SleekReorderDialog::newOrder() const {
     order.reserve(m_listWidget->count());
     for (int i = 0; i < m_listWidget->count(); ++i) {
         order.append(m_listWidget->item(i)->data(Qt::UserRole).toInt());
+    }
+    return order;
+}
+
+QVector<QString> SleekReorderDialog::newIdOrder() const {
+    QVector<QString> order;
+    if (!m_listWidget) {
+        return order;
+    }
+    order.reserve(m_listWidget->count());
+    for (int i = 0; i < m_listWidget->count(); ++i) {
+        order.append(m_listWidget->item(i)->data(Qt::UserRole + 1).toString());
     }
     return order;
 }

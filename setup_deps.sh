@@ -14,6 +14,6 @@ echo "Installing XCB Development Packages..."
 sudo apt-get install -y libxcb1-dev libxcb-ewmh-dev libxcb-icccm4-dev libxcb-keysyms1-dev libxcb-util-dev libxcb-res0-dev
 
 echo "Installing Sandbox Tools (Xephyr and Openbox)..."
-sudo apt-get install -y xserver-xephyr openbox xdotool wmctrl
+sudo apt-get install -y xserver-xephyr openbox
 
 echo "Dependencies installed successfully!"
