@@ -1,7 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 550" width="800" height="550">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
   <defs>
-    
-    <!-- 10 Distinct Barcode Color Gradients -->
     <linearGradient id="g1" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#38e2fc"/><stop offset="100%" stop-color="#06b6d4"/></linearGradient>
     <linearGradient id="g2" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#7dd3fc"/><stop offset="100%" stop-color="#38bdf8"/></linearGradient>
     <linearGradient id="g3" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#818cf8"/><stop offset="100%" stop-color="#6366f1"/></linearGradient>
@@ -13,59 +11,42 @@
     <linearGradient id="g9" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#10b981"/></linearGradient>
     <linearGradient id="g10" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#67e8f9"/><stop offset="100%" stop-color="#00f2fe"/></linearGradient>
 
-    <!-- Deck Text Gradient: Electric Sky to Hot Pink -->
     <linearGradient id="deckGrad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#38bdf8"/>
       <stop offset="45%" stop-color="#a855f7"/>
       <stop offset="100%" stop-color="#ec4899"/>
     </linearGradient>
 
-    <!-- Subtle, Gentle Luminescent Glow -->
-    <filter id="subtleBarGlow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="8" result="softGlow"/>
-    </filter>
-
-    <!-- Reusable Group of the 10 Free-Standing Barcode Bars -->
     <g id="barcodeGroup">
-      
-    <rect x="32"  y="36" width="16" height="184" rx="6" ry="6" fill="url(#g1)"/>
-    <rect x="54"  y="46" width="9"  height="164" rx="4.5" ry="4.5" fill="url(#g2)"/>
-    <rect x="68"  y="46" width="22" height="164" rx="6" ry="6" fill="url(#g3)"/>
-    <rect x="95"  y="46" width="11" height="164" rx="5.5" ry="5.5" fill="url(#g4)"/>
-    <rect x="111" y="36" width="15" height="184" rx="6" ry="6" fill="url(#g5)"/>
-    <rect x="131" y="46" width="25" height="164" rx="6" ry="6" fill="url(#g6)"/>
-    <rect x="161" y="46" width="9"  height="164" rx="4.5" ry="4.5" fill="url(#g7)"/>
-    <rect x="175" y="46" width="17" height="164" rx="6" ry="6" fill="url(#g8)"/>
-    <rect x="197" y="46" width="10" height="164" rx="5" ry="5" fill="url(#g9)"/>
-    <rect x="212" y="36" width="16" height="184" rx="6" ry="6" fill="url(#g10)"/>
-
+      <rect x="32"  y="36" width="16" height="184" rx="6" fill="url(#g1)"/>
+      <rect x="54"  y="46" width="9"  height="164" rx="4.5" fill="url(#g2)"/>
+      <rect x="68"  y="46" width="22" height="164" rx="6" fill="url(#g3)"/>
+      <rect x="95"  y="46" width="11" height="164" rx="5.5" fill="url(#g4)"/>
+      <rect x="111" y="36" width="15" height="184" rx="6" fill="url(#g5)"/>
+      <rect x="131" y="46" width="25" height="164" rx="6" fill="url(#g6)"/>
+      <rect x="161" y="46" width="9"  height="164" rx="4.5" fill="url(#g7)"/>
+      <rect x="175" y="46" width="17" height="164" rx="6" fill="url(#g8)"/>
+      <rect x="197" y="46" width="10" height="164" rx="5" fill="url(#g9)"/>
+      <rect x="212" y="36" width="16" height="184" rx="6" fill="url(#g10)"/>
     </g>
-
   </defs>
+  <rect width="800" height="600" fill="#0d0e15"/>
 
-  <rect width="800" height="550" fill="#0b0c13"/>
-
-  <!-- ================= BARS (Free-standing, closer to text, subtle glow) ================= -->
-  <g transform="translate(198.5, 22) scale(1.55)">
-    <!-- Subtle soft glow layer -->
-    <use href="#barcodeGroup" filter="url(#subtleBarGlow)" opacity="0.28"/>
-
-    <!-- Crisp Vector Bars -->
+  <!-- Centered Barcode -->
+  <g transform="translate(218, 70) scale(1.4)">
     <use href="#barcodeGroup"/>
   </g>
 
-  <!-- ================= TYPOGRAPHY ================= -->
-  <!-- Main Brand Name: gutterDeck -->
-  <text x="400" y="445" text-anchor="middle"
+  <!-- Typography in Proper Brand Case -->
+  <text x="400" y="405" text-anchor="middle"
         font-family="'Inter', 'Liberation Sans', 'DejaVu Sans', -apple-system, sans-serif"
-        font-size="80" font-weight="400" letter-spacing="-1.5px">
+        font-size="82" font-weight="400" letter-spacing="-1.5px">
     <tspan fill="#F8FAFC" font-weight="400">gutter</tspan><tspan fill="url(#deckGrad)" font-weight="800">Deck</tspan>
   </text>
 
-  <!-- Subtitle Tagline (clean finish, no bottom dashes) -->
-  <text x="400" y="496" text-anchor="middle"
+  <text x="400" y="445" text-anchor="middle"
         font-family="'Inter', 'Liberation Sans', 'DejaVu Sans', sans-serif"
-        font-size="13" font-weight="700" letter-spacing="9px" fill="#94A3B8">
-    DESKTOP COMPOSITOR DOCK
+        font-size="16" font-weight="500" letter-spacing="3px" fill="#94A3B8">
+    Desktop Compositor Dock
   </text>
 </svg>
