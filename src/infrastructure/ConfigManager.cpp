@@ -372,16 +372,23 @@ void ConfigManager::populateDefaultDecks() {
     DeckConfig deck1;
     deck1.id = "gutter_1";
     deck1.name = "Browser";
-    deck1.command = "google-chrome --new-window";
-    deck1.color = QColor("#802563eb");
+    deck1.command = "chromium --no-first-run --no-default-browser-check";
+    deck1.color = QColor("#8038bdf8");
     m_decks.append(deck1);
 
     DeckConfig deck2;
     deck2.id = "gutter_2";
-    deck2.name = "Terminal";
-    deck2.command = "x-terminal-emulator";
-    deck2.color = QColor("#8010b981");
+    deck2.name = "Files";
+    deck2.command = "pcmanfm";
+    deck2.color = QColor("#80818cf8");
     m_decks.append(deck2);
+
+    DeckConfig deck3;
+    deck3.id = "gutter_3";
+    deck3.name = "Editor";
+    deck3.command = "geany";
+    deck3.color = QColor("#80a855f7");
+    m_decks.append(deck3);
 }
 
 void ConfigManager::populateDefaultConfiguration() {
