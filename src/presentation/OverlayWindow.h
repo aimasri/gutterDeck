@@ -53,6 +53,20 @@ public:
     void updateMask(AppState state);
 
     /**
+     * @brief Moves/resizes the overlay to a new work area at runtime.
+     * @details Invoked when panels (struts) or monitor layout change. Steps:
+     *          1. No-op if the geometry is unchanged (avoids redundant X11 configure traffic).
+     *          2. setGeometry() — legitimate here: this is the override-redirect top-level, which
+     *             the WM never positions, so the application must place it itself.
+     *          3. Force synchronous layout activation so gutter geometries are current.
+     *          4. Recompute the XShape mask from the new gutter geometries.
+     *          The curtain uses overlay-local coordinates and therefore needs no adjustment.
+     * @param workArea Target rectangle in root coordinates.
+     * @note Callers must not invoke this mid-animation; DeckController defers it until IDLE.
+     */
+    void applyScreenGeometry(const QRect& workArea);
+
+    /**
      * @brief Updates visual active indicators across all gutter widgets.
      * @param activeIndex Index of the active deck.
      */

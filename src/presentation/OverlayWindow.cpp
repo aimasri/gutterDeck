@@ -129,6 +129,19 @@ void OverlayWindow::updateMask(AppState state) {
     }
 }
 
+void OverlayWindow::applyScreenGeometry(const QRect& workArea) {
+    if (!workArea.isValid() || workArea.isEmpty() || workArea == geometry()) {
+        return;
+    }
+
+    setGeometry(workArea);
+
+    if (m_mainLayout) {
+        m_mainLayout->activate();
+    }
+    updateMask(m_lastState);
+}
+
 void OverlayWindow::setActiveGutter(int activeIndex) {
     rebuildAccordionLayout(activeIndex);
 }

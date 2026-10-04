@@ -95,6 +95,15 @@ signals:
      */
     void globalScrollDown();
 
+    /**
+     * @brief Emitted when the WM rewrites the root _NET_WORKAREA property.
+     * @details The WM recomputes _NET_WORKAREA whenever any client's strut changes (panel
+     *          started, resized, killed). Consumers must treat this purely as an invalidation
+     *          trigger and recompute per-monitor geometry themselves, because the property's
+     *          single per-desktop rectangle is ambiguous on multi-head systems.
+     */
+    void workAreaInvalidated();
+
 private slots:
     /**
      * @brief Drains and processes all pending XCB events from the display socket.
@@ -109,6 +118,7 @@ private:
     std::unordered_set<uint32_t> m_knownWindows;
     xcb_atom_t m_netClientListAtom = XCB_NONE;
     xcb_atom_t m_netCurrentDesktopAtom = XCB_NONE;
+    xcb_atom_t m_netWorkAreaAtom = XCB_NONE;
     bool m_isWatching = false;
 
     /**

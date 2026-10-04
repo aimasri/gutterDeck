@@ -1,12 +1,16 @@
 #pragma once
 
 #include <QRect>
+#include <QSize>
 #include <QString>
 #include <QImage>
 #include <QVector>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <xcb/xcb.h>
+
+#include "WorkAreaCalculator.h"
 
 class XcbConnection;
 
@@ -199,6 +203,40 @@ public:
      */
     [[nodiscard]] uint32_t getWindowDesktop(xcb_window_t windowId) const;
 
+    // Work-area / strut inspection methods
+
+    /**
+     * @brief Queries the CURRENT root window size via a live xcb_get_geometry round trip.
+     * @details Unlike getScreenGeometry(), which reads the xcb_screen_t snapshot captured at
+     *          connection time (stale after any xrandr layout change), this always reflects the
+     *          current root extent. Required because EWMH struts are root-edge relative.
+     * @return Root size, or the connection-time snapshot size if the query fails.
+     */
+    [[nodiscard]] QSize getRootSize() const;
+
+    /**
+     * @brief Reads the _NET_WORKAREA rectangle published by the WM for a given desktop.
+     * @details _NET_WORKAREA holds one (x, y, w, h) tuple per desktop. Qt's xcb backend only
+     *          ever reads tuple 0; this reads the tuple of @p desktop, falling back to tuple 0
+     *          for WMs that publish a single tuple.
+     * @param desktop Zero-based desktop index.
+     * @return Work area rectangle, or std::nullopt if the property is missing/malformed.
+     */
+    [[nodiscard]] std::optional<QRect> getNetWorkArea(uint32_t desktop) const;
+
+    /**
+     * @brief Collects the screen-edge reservations (struts) of all managed clients on a desktop.
+     * @details Walks _NET_CLIENT_LIST and reads _NET_WM_STRUT_PARTIAL (falling back to legacy
+     *          _NET_WM_STRUT) plus _NET_WM_DESKTOP for every client. All property requests are
+     *          dispatched first and their replies collected afterwards (XCB request pipelining),
+     *          costing one round trip instead of 3×N. Windows destroyed mid-query produce an
+     *          X error reply that is captured and freed, never propagated.
+     * @param desktop Zero-based desktop; clients on other desktops are skipped, sticky clients
+     *        (0xFFFFFFFF) and clients without _NET_WM_DESKTOP are included.
+     * @return All non-empty reservations relevant to @p desktop.
+     */
+    [[nodiscard]] QVector<StrutReservation> getStrutReservations(uint32_t desktop) const;
+
     // Global key grabbing methods
 
     /**
@@ -285,6 +323,9 @@ private:
     xcb_atom_t m_net_moveresize_window = XCB_NONE;
     xcb_atom_t m_net_close_window = XCB_NONE;
     xcb_atom_t m_net_wm_icon = XCB_NONE;
+    xcb_atom_t m_net_wm_strut = XCB_NONE;
+    xcb_atom_t m_net_wm_strut_partial = XCB_NONE;
+    xcb_atom_t m_net_workarea = XCB_NONE;
 
     // Cached keycodes for global navigation hotkeys (Left/Right & A/S)
     xcb_keycode_t m_leftKeycode = 0;

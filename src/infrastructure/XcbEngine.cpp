@@ -1,8 +1,11 @@
 #include "XcbEngine.h"
 #include "XcbConnection.h"
 
+#include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 #include <xcb/xproto.h>
 #include <X11/keysym.h>
 #include <xcb/xcb_keysyms.h>
@@ -79,6 +82,9 @@ void XcbEngine::initAtoms() {
     m_net_moveresize_window = getAtom("_NET_MOVERESIZE_WINDOW");
     m_net_close_window = getAtom("_NET_CLOSE_WINDOW");
     m_net_wm_icon = getAtom("_NET_WM_ICON");
+    m_net_wm_strut = getAtom("_NET_WM_STRUT");
+    m_net_wm_strut_partial = getAtom("_NET_WM_STRUT_PARTIAL");
+    m_net_workarea = getAtom("_NET_WORKAREA");
 }
 
 bool XcbEngine::sendClientMessage(xcb_window_t targetWindow, xcb_atom_t messageType,
@@ -390,6 +396,177 @@ QVector<xcb_window_t> XcbEngine::getTopLevelWindows() const {
     }
 
     return windows;
+}
+
+QSize XcbEngine::getRootSize() const {
+    const QSize fallback = getScreenGeometry().size();
+    if (!m_xcbConn || m_root == XCB_WINDOW_NONE) {
+        return fallback;
+    }
+
+    xcb_generic_error_t* rawErr = nullptr;
+    xcb_ptr<xcb_get_geometry_reply_t> reply(
+        xcb_get_geometry_reply(m_xcbConn, xcb_get_geometry(m_xcbConn, m_root), &rawErr));
+    xcb_ptr<xcb_generic_error_t> err(rawErr);
+
+    if (!reply || err) {
+        return fallback;
+    }
+    return QSize(reply->width, reply->height);
+}
+
+std::optional<QRect> XcbEngine::getNetWorkArea(uint32_t desktop) const {
+    if (!m_xcbConn || m_net_workarea == XCB_NONE) {
+        return std::nullopt;
+    }
+
+    xcb_generic_error_t* rawErr = nullptr;
+    xcb_ptr<xcb_get_property_reply_t> reply(xcb_get_property_reply(
+        m_xcbConn,
+        xcb_get_property(m_xcbConn, 0, m_root, m_net_workarea, XCB_ATOM_CARDINAL, 0, 1024),
+        &rawErr));
+    xcb_ptr<xcb_generic_error_t> err(rawErr);
+
+    if (!reply || err || reply->type != XCB_ATOM_CARDINAL || reply->format != 32) {
+        return std::nullopt;
+    }
+
+    // For format 32, value_len is the number of 32-bit items.
+    const uint32_t count = reply->value_len;
+    if (count < 4) {
+        return std::nullopt;
+    }
+
+    const auto* values = static_cast<const uint32_t*>(xcb_get_property_value(reply.get()));
+    if (!values) {
+        return std::nullopt;
+    }
+
+    // Use the tuple of the requested desktop when present; otherwise tuple 0 (single-tuple WMs).
+    // 64-bit index math guards against overflow for absurd desktop indices (e.g. 0xFFFFFFFF).
+    const uint64_t wantedEnd = (static_cast<uint64_t>(desktop) + 1U) * 4U;
+    const uint64_t base = (wantedEnd <= count) ? static_cast<uint64_t>(desktop) * 4U : 0U;
+
+    const QRect area(static_cast<int>(values[base + 0]),
+                     static_cast<int>(values[base + 1]),
+                     static_cast<int>(values[base + 2]),
+                     static_cast<int>(values[base + 3]));
+    if (!area.isValid() || area.isEmpty()) {
+        return std::nullopt;
+    }
+    return area;
+}
+
+QVector<StrutReservation> XcbEngine::getStrutReservations(uint32_t desktop) const {
+    QVector<StrutReservation> result;
+    if (!m_xcbConn || m_net_client_list == XCB_NONE) {
+        return result;
+    }
+
+    // 1. Read the raw managed-client list. getTopLevelWindows() is intentionally NOT reused:
+    //    it filters transients and costs two sequential round trips per window.
+    QVector<xcb_window_t> clients;
+    {
+        xcb_generic_error_t* rawErr = nullptr;
+        xcb_ptr<xcb_get_property_reply_t> listReply(xcb_get_property_reply(
+            m_xcbConn,
+            xcb_get_property(m_xcbConn, 0, m_root, m_net_client_list, XCB_ATOM_WINDOW, 0, 4096),
+            &rawErr));
+        xcb_ptr<xcb_generic_error_t> err(rawErr);
+
+        if (!listReply || err || listReply->type != XCB_ATOM_WINDOW || listReply->format != 32) {
+            return result;
+        }
+        const auto* raw = static_cast<const xcb_window_t*>(xcb_get_property_value(listReply.get()));
+        if (!raw) {
+            return result;
+        }
+        clients.reserve(static_cast<int>(listReply->value_len));
+        for (uint32_t i = 0; i < listReply->value_len; ++i) {
+            clients.append(raw[i]);
+        }
+    }
+
+    if (clients.isEmpty()) {
+        return result;
+    }
+
+    const QSize root = getRootSize();
+
+    // 2. Pipelining: dispatch every request before waiting on any reply.
+    struct PendingQuery {
+        xcb_window_t window;
+        xcb_get_property_cookie_t partial;
+        xcb_get_property_cookie_t legacy;
+        xcb_get_property_cookie_t desktop;
+    };
+    std::vector<PendingQuery> pending;
+    pending.reserve(static_cast<size_t>(clients.size()));
+
+    for (xcb_window_t wid : clients) {
+        PendingQuery q{};
+        q.window = wid;
+        q.partial = xcb_get_property(m_xcbConn, 0, wid, m_net_wm_strut_partial, XCB_ATOM_CARDINAL, 0, 12);
+        q.legacy = xcb_get_property(m_xcbConn, 0, wid, m_net_wm_strut, XCB_ATOM_CARDINAL, 0, 4);
+        q.desktop = xcb_get_property(m_xcbConn, 0, wid, m_net_wm_desktop, XCB_ATOM_CARDINAL, 0, 1);
+        pending.push_back(q);
+    }
+
+    // Helper: collect one reply, capturing (and freeing) any X error such as BadWindow for a
+    // client destroyed between the list read and this query. EVERY cookie must be consumed,
+    // otherwise XCB retains the reply for the connection's lifetime (leak).
+    auto collect = [this](xcb_get_property_cookie_t cookie) {
+        xcb_generic_error_t* rawErr = nullptr;
+        xcb_ptr<xcb_get_property_reply_t> reply(xcb_get_property_reply(m_xcbConn, cookie, &rawErr));
+        xcb_ptr<xcb_generic_error_t> err(rawErr);
+        if (err) {
+            reply.reset();
+        }
+        return reply;
+    };
+
+    auto cardinalsOf = [](const xcb_get_property_reply_t* reply, uint32_t minCount) -> const uint32_t* {
+        if (!reply || reply->type != XCB_ATOM_CARDINAL || reply->format != 32 ||
+            reply->value_len < minCount) {
+            return nullptr;
+        }
+        return static_cast<const uint32_t*>(
+            xcb_get_property_value(const_cast<xcb_get_property_reply_t*>(reply)));
+    };
+
+    // 3. Collect replies in dispatch order.
+    for (const PendingQuery& q : pending) {
+        auto partialReply = collect(q.partial);
+        auto legacyReply = collect(q.legacy);
+        auto desktopReply = collect(q.desktop);
+
+        // Desktop filter: skip clients pinned to a different desktop. Missing property is
+        // treated as sticky so a panel is never ignored because of an incomplete WM.
+        if (const uint32_t* d = cardinalsOf(desktopReply.get(), 1)) {
+            if (d[0] != 0xFFFFFFFFU && d[0] != desktop) {
+                continue;
+            }
+        }
+
+        StrutReservation strut;
+        if (const uint32_t* p = cardinalsOf(partialReply.get(), 12)) {
+            std::array<uint32_t, 12> values{};
+            std::copy(p, p + 12, values.begin());
+            strut = StrutReservation::fromPartial(values);
+        } else if (const uint32_t* l = cardinalsOf(legacyReply.get(), 4)) {
+            std::array<uint32_t, 4> values{};
+            std::copy(l, l + 4, values.begin());
+            strut = StrutReservation::fromLegacy(values, root);
+        } else {
+            continue;
+        }
+
+        if (!strut.isEmpty()) {
+            result.append(strut);
+        }
+    }
+
+    return result;
 }
 
 namespace {

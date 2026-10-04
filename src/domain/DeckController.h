@@ -2,8 +2,10 @@
 
 #include <QColor>
 #include <QObject>
+#include <QRect>
 #include <QString>
 #include <QVector>
+#include <optional>
 #include <xcb/xcb.h>
 
 #include "../presentation/GutterWidget.h"
@@ -175,6 +177,16 @@ public slots:
     void onCurrentDesktopChanged(uint32_t currentDesktop);
 
     /**
+     * @brief Triggered by WorkAreaTracker when the usable (panel-free) monitor area changes.
+     * @details If the StateMachine is IDLE the new area is applied immediately (overlay resize +
+     *          active/split deck windows re-asserted). During SWITCHING_OUT / SWITCHING_IN it is
+     *          only recorded and applied from onSwitchComplete() (or the watchdog recovery path),
+     *          so the overlay is never resized underneath a moving curtain.
+     * @param workArea New work area in root coordinates; invalid/empty rects are ignored.
+     */
+    void onWorkAreaChanged(const QRect& workArea);
+
+    /**
      * @brief Gets the assigned workspace desktop for this Gutter Deck instance.
      * @return Zero-based virtual desktop workspace index.
      */
@@ -300,10 +312,30 @@ private:
     void onSwitchComplete();
 
     /**
-     * @brief Calculates current screen or overlay geometry for window positioning.
-     * @return Target screen QRect.
+     * @brief Calculates the rectangle deck windows and the overlay must occupy.
+     * @details Resolution order:
+     *          1. The tracked work area (monitor minus panel struts) once WorkAreaTracker reported it.
+     *          2. The overlay's current geometry.
+     *          3. Explicit screen_width/screen_height settings.
+     *          4. Raw X11 root geometry.
+     * @return Target QRect in root coordinates.
      */
     [[nodiscard]] QRect targetGeometry() const;
+
+    /**
+     * @brief Commits the staged work area (if any), resizes the overlay and re-asserts decks.
+     * @details Must only be called while IDLE: from onWorkAreaChanged(), onSwitchComplete()
+     *          or the watchdog recovery path.
+     */
+    void applyWorkArea();
+
+    /**
+     * @brief Re-applies targetGeometry()-derived bounds to the visible deck window(s).
+     * @details Split mode: both split windows get their half-geometries.
+     *          Single mode: the active deck window gets the full target geometry.
+     *          Background (minimized) decks are untouched; they are sized when activated.
+     */
+    void reassertDeckGeometry();
 
     StateMachine& m_stateMachine;
     XcbEngine& m_xcbEngine;
@@ -322,4 +354,6 @@ private:
     uint32_t m_assignedDesktop = 0;
     int m_lastLaunchedDeckIndex = -1;
     qint64 m_lastLaunchedTimestampMs = 0;
+    QRect m_workArea;
+    std::optional<QRect> m_pendingWorkArea;
 };

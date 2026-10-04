@@ -196,7 +196,7 @@ gutterDeck v3.0 is designed strictly following **Domain-Driven Design (DDD)** an
 ### Layer Decomposition
 
 #### 1. Presentation Layer (`src/presentation/`)
-- **`OverlayWindow`:** A full-screen transparent canvas bypassing the window manager (`Qt::X11BypassWindowManagerHint`, `Qt::WA_TranslucentBackground`). Dynamically applies 1-bit XShape masks so the desktop remains click-through when resting, and solidifies during wipes to capture accidental clicks.
+- **`OverlayWindow`:** A transparent canvas sized to the monitor's panel-aware work area (see `WorkAreaTracker`), bypassing the window manager (`Qt::X11BypassWindowManagerHint`, `Qt::WA_TranslucentBackground`). Dynamically applies 1-bit XShape masks so the desktop remains click-through when resting, and solidifies during wipes to capture accidental clicks.
 - **`GutterWidget`:** Individual interactive edge tabs. Implements 3-stage swell dynamics, active white accent indicators, center navigation icons, rotated cascading labels, and 80px top buffer protection.
 - **`CurtainWidget`:** High-performance transition wipe widget that sweeps across the screen in two phases, masking window minimize and activate operations.
 - **`SleekDialogs`:** Custom dark Openbox-styled modal dialogs (`SleekInputDialog`, `SleekColorDialog`, `SleekAddDeckDialog`, `SleekReorderDialog`) with high-contrast text inputs, 24 curated swatches, and opacity sliders.
@@ -211,6 +211,8 @@ gutterDeck v3.0 is designed strictly following **Domain-Driven Design (DDD)** an
 - **`XcbConnection`:** RAII manager for `xcb_connection_t*` and `xcb_ewmh_connection_t`. Initializes core EWMH atoms and provides the raw file descriptor for Qt socket integration.
 - **`XcbEngine`:** Direct, bare-metal X11 window management. Dispatches EWMH/ICCCM requests for activation (`_NET_ACTIVE_WINDOW`), minimization (`WM_CHANGE_STATE`), restoration, geometry (`moveResizeWindow`), workspace assignment (`_NET_WM_DESKTOP`), taskbar skipping (`_NET_WM_STATE_SKIP_TASKBAR`), window type docking (`_NET_WM_WINDOW_TYPE_DOCK`), and client closure (`WM_DELETE_WINDOW`).
 - **`WindowWatcher`:** Event-driven event listener. Connects a `QSocketNotifier` to the XCB file descriptor to monitor root window events (`MapNotify`, `DestroyNotify`, `PropertyNotify`) without polling.
+- **`WorkAreaCalculator`:** Pure, unit-tested strut math. Intersects a monitor's geometry with every panel's `_NET_WM_STRUT_PARTIAL`/`_NET_WM_STRUT` reservation (only struts whose span actually touches that monitor), plus `_NET_WORKAREA` when a single monitor is attached.
+- **`WorkAreaTracker`:** Keeps the per-monitor work area current. Recomputes (150ms debounce) on `_NET_WORKAREA` changes, window map/destroy (panels appearing/disappearing) and screen geometry changes, and emits `workAreaChanged` so the overlay, gutters and deck windows never cover taskbar panels such as tint2.
 - **`ConfigManager`:** Loads, validates, and atomically serializes application settings and deck configurations to `~/.config/gutter-deck/config.json`.
 
 ---

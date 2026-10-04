@@ -38,3 +38,12 @@ add_executable(test_profile_manager
 target_include_directories(test_profile_manager PRIVATE ../src)
 target_link_libraries(test_profile_manager PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
 add_test(NAME TestProfileManager COMMAND test_profile_manager)
+
+# Test Work Area Calculator (pure strut geometry, no X11 / no event loop)
+add_executable(test_work_area_calculator
+    test_work_area_calculator.cpp
+    ../src/infrastructure/WorkAreaCalculator.cpp
+)
+target_include_directories(test_work_area_calculator PRIVATE ../src)
+target_link_libraries(test_work_area_calculator PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME TestWorkAreaCalculator COMMAND test_work_area_calculator)

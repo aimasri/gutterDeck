@@ -10,7 +10,8 @@ WindowWatcher::WindowWatcher(XcbConnection& conn, XcbEngine& engine, QObject* pa
       m_conn(conn),
       m_engine(engine),
       m_netClientListAtom(engine.getAtom("_NET_CLIENT_LIST")),
-      m_netCurrentDesktopAtom(engine.getAtom("_NET_CURRENT_DESKTOP")) {}
+      m_netCurrentDesktopAtom(engine.getAtom("_NET_CURRENT_DESKTOP")),
+      m_netWorkAreaAtom(engine.getAtom("_NET_WORKAREA")) {}
 
 WindowWatcher::~WindowWatcher() {
     stopWatching();
@@ -88,6 +89,9 @@ void WindowWatcher::processXcbEvents() {
                     } else if (propEvent->atom == m_netCurrentDesktopAtom) {
                         uint32_t currentDesktop = m_engine.getCurrentDesktop();
                         emit currentDesktopChanged(currentDesktop);
+                    } else if (propEvent->atom == m_netWorkAreaAtom) {
+                        // Trigger only; the value is ambiguous on multi-head and is not consumed here.
+                        emit workAreaInvalidated();
                     }
                 }
                 break;

@@ -77,7 +77,10 @@
 - Use `target_link_libraries` with `PUBLIC` / `PRIVATE` / `INTERFACE` correctly to express dependency boundaries.
 
 ### Testing
-- Utilise **Google Test (GTest)** for unit testing core logic (e.g., configuration parsing, data transformations, state machines) outside of the Qt event loop.
+- Always use the **best test framework available** for the code under test. Evaluate in this order: (1) capability fit for what is being tested, (2) consistency with suites already established in the project, (3) zero additional dependencies.
+- The project's established framework is currently **Qt Test (QtTest)**, registered via CTest. It integrates natively with Qt types (`QCOMPARE` on `QRect`/`QString`), `QSignalSpy` for signal/slot verification and `QTest::qWait` for event-loop timing — use it by default. Use `QTEST_APPLESS_MAIN` for pure logic that needs no `QApplication`.
+- Only introduce a different framework (e.g. Google Test, Catch2) when it provides a concrete capability QtTest lacks (e.g. mocking via GMock, parameterised property tests), and state that justification in the compliance check before adding the dependency.
+- Unit-test core logic (configuration parsing, data transformations, geometry math, state machines) outside of the X11 server; isolate pure logic from XCB so it can be tested deterministically.
 - Keep test files alongside or mirroring the source tree structure.
 
 ## 11. Version Control & Evolution

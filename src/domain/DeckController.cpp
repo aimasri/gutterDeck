@@ -168,6 +168,11 @@ void DeckController::initialize() {
         if (m_overlay) {
             m_overlay->updateMask(AppState::IDLE);
         }
+        // The watchdog forces IDLE without passing through onSwitchComplete(); a work-area
+        // change deferred during the stalled switch would otherwise remain pending forever.
+        if (m_pendingWorkArea) {
+            applyWorkArea();
+        }
     });
 
     // Start watching X11 window lifecycle
@@ -388,6 +393,10 @@ void DeckController::onGutterClicked(int index) {
 }
 
 QRect DeckController::targetGeometry() const {
+    // 1. Panel-aware work area published by WorkAreaTracker (authoritative once known).
+    if (m_workArea.isValid() && !m_workArea.isEmpty()) {
+        return m_workArea;
+    }
     if (m_overlay) {
         return m_overlay->geometry();
     }
@@ -488,7 +497,54 @@ void DeckController::onCurtainPhase1Complete(int targetDeck) {
 void DeckController::onSwitchComplete() {
     static_cast<void>(m_stateMachine.tryTransition(AppState::SWITCHING_IN, AppState::IDLE));
 
-    // Re-assert target geometry on completion to lock placement
+    // Flush a work-area change that arrived mid-animation (staged by onWorkAreaChanged).
+    // applyWorkArea() also re-asserts deck geometry, so the explicit call is in the else branch.
+    if (m_pendingWorkArea) {
+        applyWorkArea();
+    } else {
+        // Re-assert target geometry on completion to lock placement
+        reassertDeckGeometry();
+    }
+
+    if (m_overlay) {
+        m_overlay->updateMask(AppState::IDLE);
+    }
+
+    emit deckSwitched(m_activeDeckIndex);
+}
+
+void DeckController::onWorkAreaChanged(const QRect& workArea) {
+    if (!workArea.isValid() || workArea.isEmpty()) {
+        qWarning() << "DeckController: ignoring invalid work area" << workArea;
+        return;
+    }
+
+    // Always stage first; commit happens in applyWorkArea(). While a switch is running, the
+    // curtain and deck placement keep using the OLD geometry so the whole animation stays
+    // self-consistent, and the new geometry is committed atomically once IDLE.
+    m_pendingWorkArea = workArea;
+
+    if (m_stateMachine.isIdle()) {
+        applyWorkArea();
+    } else {
+        qDebug() << "DeckController: work area change deferred until switch completes:" << workArea;
+    }
+}
+
+void DeckController::applyWorkArea() {
+    if (m_pendingWorkArea) {
+        m_workArea = *m_pendingWorkArea;
+        m_pendingWorkArea.reset();
+    }
+    qDebug() << "DeckController: applying work area" << m_workArea;
+
+    if (m_overlay) {
+        m_overlay->applyScreenGeometry(m_workArea);
+    }
+    reassertDeckGeometry();
+}
+
+void DeckController::reassertDeckGeometry() {
     if (m_isSplitMode) {
         if (m_splitPrimaryIndex >= 0 && m_splitPrimaryIndex < m_decks.size()) {
             xcb_window_t w1 = m_decks[m_splitPrimaryIndex].windowId;
@@ -511,12 +567,6 @@ void DeckController::onSwitchComplete() {
             static_cast<void>(m_xcbEngine.moveResizeWindow(activeWin, scr.x(), scr.y(), scr.width(), scr.height()));
         }
     }
-
-    if (m_overlay) {
-        m_overlay->updateMask(AppState::IDLE);
-    }
-
-    emit deckSwitched(m_activeDeckIndex);
 }
 
 void DeckController::onDeckLaunched(int index, qint64 pid, const QString& command) {

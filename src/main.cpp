@@ -13,6 +13,7 @@
 #include "infrastructure/XcbEngine.h"
 #include "infrastructure/WindowWatcher.h"
 #include "infrastructure/ConfigManager.h"
+#include "infrastructure/WorkAreaTracker.h"
 
 #include "domain/StateMachine.h"
 #include "domain/AppLauncher.h"
@@ -205,6 +206,17 @@ int main(int argc, char* argv[]) {
                          
         // Ensure X11 EWMH window type is DOCK so Compton/window managers exempt it from drop shadows
         static_cast<void>(xcbEngine.setWindowTypeDock(static_cast<xcb_window_t>(overlay.winId())));
+
+        // 7. Panel-aware work area tracking (tint2 and other strut-reserving docks).
+        //    Constructed after controller.initialize() so the assigned desktop is resolved.
+        //    start() computes synchronously, so the overlay already has its panel-free
+        //    geometry before the first show() below (no frame drawn over the panel).
+        //    Declared after controller/overlay => destroyed before them (reverse order).
+        WorkAreaTracker workAreaTracker(xcbEngine, windowWatcher, targetScreen,
+                                        controller.assignedDesktop());
+        QObject::connect(&workAreaTracker, &WorkAreaTracker::workAreaChanged,
+                         &controller, &DeckController::onWorkAreaChanged);
+        workAreaTracker.start();
 
         if (xcbEngine.getCurrentDesktop() == controller.assignedDesktop()) {
             overlay.show();

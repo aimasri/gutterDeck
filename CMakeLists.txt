@@ -27,6 +27,8 @@ set(SOURCES
     src/infrastructure/XcbEngine.cpp
     src/infrastructure/WindowWatcher.cpp
     src/infrastructure/ConfigManager.cpp
+    src/infrastructure/WorkAreaCalculator.cpp
+    src/infrastructure/WorkAreaTracker.cpp
     src/domain/StateMachine.cpp
     src/domain/AppLauncher.cpp
     src/domain/DeckController.cpp
